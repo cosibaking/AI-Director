@@ -2,6 +2,9 @@
 
 灵感来自于 一站式的漫剧制作平台 [AniKuku AI 漫剧制作平台](https://anikuku.com/?github) 。
 
+## 商用、问题和沟通可联系我
+
+cinegen@ullrai.com
 
 > **工业级 AI 漫剧与视频生成工作台**
 > *Industrial AI Motion Comic & Video Workbench*
