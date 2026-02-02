@@ -3,7 +3,7 @@
 灵感来自于 一站式的漫剧制作平台 [AniKuku AI 漫剧制作平台](https://anikuku.com/?github)  - use `CINEGEN50OFF` checkout for 50%OFF。
 
 
-**AniKuku 给我提供了优惠码，首次购买，结账时使用 `CINEGEN50OFF` 可以获得 50% 折扣（5 折）**
+**AniKuku 提供的优惠码，首次购买，结账时使用 `CINEGEN50OFF` 可以获得 50% 折扣（5 折）**
 
 
 
