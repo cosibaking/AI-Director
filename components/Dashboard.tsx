@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Plus, Trash2, Loader2, Folder, ChevronRight, Calendar, AlertTriangle, X } from 'lucide-react';
 import { ProjectState } from '../types';
 import { getAllProjectsMetadata, createNewProjectState, deleteProjectFromDB } from '../services/storageService';
+import { logger } from '../utils/logger';
 
 interface Props {
   onOpenProject: (project: ProjectState) => void;
@@ -14,11 +15,13 @@ const Dashboard: React.FC<Props> = ({ onOpenProject }) => {
 
   const loadProjects = async () => {
     setIsLoading(true);
+    logger.info('DASHBOARD', '加载项目列表');
     try {
       const list = await getAllProjectsMetadata();
       setProjects(list);
+      logger.info('DASHBOARD', '项目列表加载成功', { count: list.length });
     } catch (e) {
-      console.error("Failed to load projects", e);
+      logger.error('DASHBOARD', '项目列表加载失败', { error: e });
     } finally {
       setIsLoading(false);
     }
@@ -29,6 +32,7 @@ const Dashboard: React.FC<Props> = ({ onOpenProject }) => {
   }, []);
 
   const handleCreate = () => {
+    logger.userAction('创建新项目');
     const newProject = createNewProjectState();
     onOpenProject(newProject);
   };
@@ -45,11 +49,13 @@ const Dashboard: React.FC<Props> = ({ onOpenProject }) => {
 
   const confirmDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
+    logger.userAction('删除项目', { projectId: id });
     try {
         await deleteProjectFromDB(id);
         await loadProjects();
+        logger.info('DASHBOARD', '项目删除成功', { projectId: id });
     } catch (error) {
-        console.error("Delete failed", error);
+        logger.error('DASHBOARD', '项目删除失败', { projectId: id, error });
         alert("删除项目失败");
     } finally {
         setDeleteConfirmId(null);

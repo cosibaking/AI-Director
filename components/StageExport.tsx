@@ -141,21 +141,30 @@ const StageExport: React.FC<Props> = ({ project }) => {
 
           {/* Secondary Options */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="p-5 bg-[#141414] border border-zinc-800 rounded-xl hover:border-zinc-600 transition-colors group cursor-pointer flex flex-col justify-between h-32">
+              <div 
+                onClick={() => alert('COMING SOON ...')}
+                className="p-5 bg-[#141414] border border-zinc-800 rounded-xl hover:border-zinc-600 transition-colors group cursor-pointer flex flex-col justify-between h-32"
+              >
                   <Layers className="w-5 h-5 text-zinc-600 group-hover:text-indigo-400 mb-4 transition-colors" />
                   <div>
                     <h4 className="text-sm font-bold text-white mb-1">Source Assets</h4>
                     <p className="text-[10px] text-zinc-500">Download all generated images and raw video clips.</p>
                   </div>
               </div>
-              <div className="p-5 bg-[#141414] border border-zinc-800 rounded-xl hover:border-zinc-600 transition-colors group cursor-pointer flex flex-col justify-between h-32">
+              <div 
+                onClick={() => alert('COMING SOON ...')}
+                className="p-5 bg-[#141414] border border-zinc-800 rounded-xl hover:border-zinc-600 transition-colors group cursor-pointer flex flex-col justify-between h-32"
+              >
                   <Share2 className="w-5 h-5 text-zinc-600 group-hover:text-indigo-400 mb-4 transition-colors" />
                   <div>
                     <h4 className="text-sm font-bold text-white mb-1">Share Project</h4>
                     <p className="text-[10px] text-zinc-500">Create a view-only link for client review.</p>
                   </div>
               </div>
-              <div className="p-5 bg-[#141414] border border-zinc-800 rounded-xl hover:border-zinc-600 transition-colors group cursor-pointer flex flex-col justify-between h-32">
+              <div 
+                onClick={() => alert('COMING SOON ...')}
+                className="p-5 bg-[#141414] border border-zinc-800 rounded-xl hover:border-zinc-600 transition-colors group cursor-pointer flex flex-col justify-between h-32"
+              >
                   <Clock className="w-5 h-5 text-zinc-600 group-hover:text-indigo-400 mb-4 transition-colors" />
                   <div>
                     <h4 className="text-sm font-bold text-white mb-1">Render Logs</h4>

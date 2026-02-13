@@ -6,9 +6,10 @@ interface SidebarProps {
   setStage: (stage: 'script' | 'assets' | 'director' | 'export') => void;
   onExit: () => void;
   projectName?: string;
+  onSettingsClick?: () => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ currentStage, setStage, onExit, projectName }) => {
+const Sidebar: React.FC<SidebarProps> = ({ currentStage, setStage, onExit, projectName, onSettingsClick }) => {
   const navItems = [
     { id: 'script', label: '剧本与故事', icon: FileText, sub: 'Phase 01' },
     { id: 'assets', label: '角色与场景', icon: Users, sub: 'Phase 02' },
@@ -71,10 +72,13 @@ const Sidebar: React.FC<SidebarProps> = ({ currentStage, setStage, onExit, proje
 
       {/* Footer */}
       <div className="p-6 border-t border-zinc-900">
-        <div className="flex items-center justify-between text-zinc-600 hover:text-white cursor-pointer transition-colors">
+        <button 
+          onClick={onSettingsClick}
+          className="w-full flex items-center justify-between text-zinc-600 hover:text-white transition-colors"
+        >
           <span className="font-mono text-[10px] uppercase tracking-widest">系统设置</span>
           <Settings className="w-4 h-4" />
-        </div>
+        </button>
       </div>
     </aside>
   );

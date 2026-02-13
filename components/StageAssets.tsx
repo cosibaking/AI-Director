@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { User, MapPin, Check, Sparkles, Loader2, Users, RefreshCw, Shirt, Plus, X, Camera, ChevronRight } from 'lucide-react';
 import { ProjectState, Character, CharacterVariation } from '../types';
-import { generateImage, generateVisualPrompts } from '../services/geminiService';
+import { generateImage, generateVisualPrompts } from '../services/doubaoService';
+import { logger } from '../utils/logger';
 
 interface Props {
   project: ProjectState;
@@ -18,16 +19,23 @@ const StageAssets: React.FC<Props> = ({ project, updateProject }) => {
   const [newVarPrompt, setNewVarPrompt] = useState("");
 
   const handleGenerateAsset = async (type: 'character' | 'scene', id: string) => {
+    logger.userAction(`生成${type === 'character' ? '角色' : '场景'}图片`, { projectId: project.id, assetId: id, type });
     setGeneratingId(id);
     try {
       // Find the item
       let prompt = "";
       if (type === 'character') {
         const char = project.scriptData?.characters.find(c => String(c.id) === String(id));
-        if (char) prompt = char.visualPrompt || await generateVisualPrompts('character', char, project.scriptData?.genre || 'Cinematic');
+        if (char) {
+          prompt = char.visualPrompt || await generateVisualPrompts('character', char, project.scriptData?.genre || 'Cinematic');
+          logger.debug('STAGE_ASSETS', '生成角色图片', { characterId: id, characterName: char.name, hasExistingPrompt: !!char.visualPrompt });
+        }
       } else {
         const scene = project.scriptData?.scenes.find(s => String(s.id) === String(id));
-        if (scene) prompt = scene.visualPrompt || await generateVisualPrompts('scene', scene, project.scriptData?.genre || 'Cinematic');
+        if (scene) {
+          prompt = scene.visualPrompt || await generateVisualPrompts('scene', scene, project.scriptData?.genre || 'Cinematic');
+          logger.debug('STAGE_ASSETS', '生成场景图片', { sceneId: id, location: scene.location, hasExistingPrompt: !!scene.visualPrompt });
+        }
       }
 
       // Real API Call
@@ -44,10 +52,11 @@ const StageAssets: React.FC<Props> = ({ project, updateProject }) => {
           if (s) s.referenceImage = imageUrl;
         }
         updateProject({ scriptData: newData });
+        logger.info('STAGE_ASSETS', `${type === 'character' ? '角色' : '场景'}图片生成成功`, { projectId: project.id, assetId: id });
       }
 
     } catch (e) {
-      console.error(e);
+      logger.error('STAGE_ASSETS', `${type === 'character' ? '角色' : '场景'}图片生成失败`, { projectId: project.id, assetId: id, error: e });
     } finally {
       setGeneratingId(null);
     }
@@ -69,17 +78,29 @@ const StageAssets: React.FC<Props> = ({ project, updateProject }) => {
     }
 
     const targetItems = isRegenerate ? items : itemsToGen;
+    logger.userAction(`批量生成${type === 'character' ? '角色' : '场景'}图片`, { 
+      projectId: project.id,
+      total: targetItems.length,
+      isRegenerate
+    });
 
     setBatchProgress({ current: 0, total: targetItems.length });
 
     for (let i = 0; i < targetItems.length; i++) {
       // Rate Limit Mitigation: 3s delay
-      if (i > 0) await new Promise(r => setTimeout(r, 3000));
+      if (i > 0) {
+        logger.debug('STAGE_ASSETS', '批量生成延迟 3s', { current: i + 1, total: targetItems.length });
+        await new Promise(r => setTimeout(r, 3000));
+      }
       
       await handleGenerateAsset(type, targetItems[i].id);
       setBatchProgress({ current: i + 1, total: targetItems.length });
     }
 
+    logger.info('STAGE_ASSETS', `批量生成${type === 'character' ? '角色' : '场景'}图片完成`, { 
+      projectId: project.id,
+      total: targetItems.length
+    });
     setBatchProgress(null);
   };
 
@@ -124,8 +145,9 @@ const StageAssets: React.FC<Props> = ({ project, updateProject }) => {
           if (v) v.referenceImage = imageUrl;
 
           updateProject({ scriptData: newData });
+          logger.info('STAGE_ASSETS', '角色变体图片生成成功', { projectId: project.id, characterId: charId, variationId: varId });
       } catch (e) {
-          console.error(e);
+          logger.error('STAGE_ASSETS', '角色变体图片生成失败', { projectId: project.id, characterId: charId, variationId: varId, error: e });
           alert("Variation generation failed");
       } finally {
           setGeneratingId(null);

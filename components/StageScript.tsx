@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { BrainCircuit, Wand2, ChevronRight, AlertCircle, Users, MapPin, List, TextQuote, Clock, BookOpen, PenTool, ArrowLeft, Languages, Aperture, AlignLeft } from 'lucide-react';
 import { ProjectState } from '../types';
-import { parseScriptToData, generateShotList } from '../services/geminiService';
+import { parseScriptToData, generateShotList } from '../services/doubaoService';
+import { logger } from '../utils/logger';
 
 interface Props {
   project: ProjectState;
@@ -58,16 +59,24 @@ const StageScript: React.FC<Props> = ({ project, updateProject }) => {
 
   const handleAnalyze = async () => {
     if (!localScript.trim()) {
+      logger.warn('STAGE_SCRIPT', '分析失败：剧本内容为空');
       setError("请输入剧本内容。");
       return;
     }
 
     const finalDuration = getFinalDuration();
     if (!finalDuration) {
+      logger.warn('STAGE_SCRIPT', '分析失败：未选择目标时长');
       setError("请选择目标时长。");
       return;
     }
 
+    logger.userAction('开始分析剧本', { 
+      projectId: project.id,
+      scriptLength: localScript.length,
+      duration: finalDuration,
+      language: localLanguage
+    });
     setIsProcessing(true);
     setError(null);
     try {
@@ -90,6 +99,13 @@ const StageScript: React.FC<Props> = ({ project, updateProject }) => {
 
       const shots = await generateShotList(scriptData);
 
+      logger.info('STAGE_SCRIPT', '剧本分析完成', {
+        projectId: project.id,
+        charactersCount: scriptData.characters.length,
+        scenesCount: scriptData.scenes.length,
+        shotsCount: shots.length
+      });
+
       updateProject({ 
         scriptData, 
         shots, 
@@ -100,7 +116,7 @@ const StageScript: React.FC<Props> = ({ project, updateProject }) => {
       setActiveTab('script');
 
     } catch (err: any) {
-      console.error(err);
+      logger.error('STAGE_SCRIPT', '剧本分析失败', { projectId: project.id, error: err });
       setError(`错误: ${err.message || "AI 连接失败"}`);
       updateProject({ isParsingScript: false });
     } finally {

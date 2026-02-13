@@ -1,5 +1,7 @@
 import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
 import { ScriptData, Shot, Character, Scene } from "../types";
+import { saveFileToServer, generateFilename } from "./fileService";
+import { logger } from "../utils/logger";
 
 // Module-level variable to store the key at runtime
 let runtimeApiKey: string = process.env.API_KEY || "";
@@ -341,7 +343,19 @@ export const generateImage = async (prompt: string, referenceImages: string[] = 
   // Extract base64 image
   for (const part of response.candidates?.[0]?.content?.parts || []) {
     if (part.inlineData) {
-      return `data:image/png;base64,${part.inlineData.data}`;
+      const dataUrl = `data:image/png;base64,${part.inlineData.data}`;
+      
+      // 保存到服务器
+      try {
+        const filename = generateFilename('image', '.png');
+        const serverUrl = await saveFileToServer('images', filename, dataUrl, 'image/png');
+        logger.info('IMAGE', '图片已保存到服务器', { serverUrl });
+        // 返回服务器 URL，如果保存失败则返回原始 data URL
+        return serverUrl || dataUrl;
+      } catch (saveError: any) {
+        logger.warn('IMAGE', '图片保存到服务器失败，使用原始 data URL', { error: saveError });
+        return dataUrl;
+      }
     }
   }
   throw new Error("图片生成失败 (No image data returned)");

@@ -5,26 +5,33 @@ import StageAssets from './components/StageAssets';
 import StageDirector from './components/StageDirector';
 import StageExport from './components/StageExport';
 import Dashboard from './components/Dashboard';
+import SettingsModal from './components/SettingsModal';
 import { ProjectState } from './types';
 import { Key, Save, CheckCircle, ArrowRight, ShieldCheck } from 'lucide-react';
 import { saveProjectToDB } from './services/storageService';
-import { setGlobalApiKey } from './services/geminiService';
+import { setGlobalApiKey } from './services/doubaoService';
+import { logger } from './utils/logger';
 
 function App() {
   const [project, setProject] = useState<ProjectState | null>(null);
   const [apiKey, setApiKey] = useState<string>('');
   const [inputKey, setInputKey] = useState('');
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved');
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   
   // Ref to hold debounce timer
   const saveTimeoutRef = useRef<any>(null);
 
   // Load API Key from localStorage on mount
   useEffect(() => {
-    const storedKey = localStorage.getItem('cinegen_api_key');
+    logger.info('APP', '应用初始化');
+    const storedKey = localStorage.getItem('cinegen_doubao_api_key');
     if (storedKey) {
+      logger.info('APP', '从 localStorage 加载 API Key', { hasKey: true });
       setApiKey(storedKey);
       setGlobalApiKey(storedKey);
+    } else {
+      logger.info('APP', '未找到存储的 API Key');
     }
   }, []);
 
@@ -35,13 +42,15 @@ function App() {
     setSaveStatus('unsaved');
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
 
+    logger.debug('APP', '项目已修改，准备自动保存', { projectId: project.id });
     saveTimeoutRef.current = setTimeout(async () => {
       setSaveStatus('saving');
       try {
         await saveProjectToDB(project);
         setSaveStatus('saved');
+        logger.debug('APP', '自动保存成功', { projectId: project.id });
       } catch (e) {
-        console.error("Auto-save failed", e);
+        logger.error('APP', '自动保存失败', { projectId: project.id, error: e });
       }
     }, 1000); // Debounce 1s
 
@@ -52,13 +61,15 @@ function App() {
 
   const handleSaveKey = () => {
     if (!inputKey.trim()) return;
+    logger.userAction('保存 API Key');
     setApiKey(inputKey);
     setGlobalApiKey(inputKey);
-    localStorage.setItem('cinegen_api_key', inputKey);
+    localStorage.setItem('cinegen_doubao_api_key', inputKey);
   };
 
   const handleClearKey = () => {
-      localStorage.removeItem('cinegen_api_key');
+      logger.userAction('清除 API Key 并退出');
+      localStorage.removeItem('cinegen_doubao_api_key');
       setApiKey('');
       setGlobalApiKey('');
       setProject(null);
@@ -66,20 +77,26 @@ function App() {
 
   const updateProject = (updates: Partial<ProjectState>) => {
     if (!project) return;
+    logger.debug('APP', '更新项目', { projectId: project.id, updates: Object.keys(updates) });
     setProject(prev => prev ? ({ ...prev, ...updates }) : null);
   };
 
   const setStage = (stage: 'script' | 'assets' | 'director' | 'export') => {
+    if (project) {
+      logger.stateChange('项目阶段', project.stage, stage, { projectId: project.id });
+    }
     updateProject({ stage });
   };
 
   const handleOpenProject = (proj: ProjectState) => {
+    logger.userAction('打开项目', { projectId: proj.id, title: proj.title });
     setProject(proj);
   };
 
   const handleExitProject = async () => {
     // Force save before exiting
     if (project) {
+        logger.userAction('退出项目', { projectId: project.id });
         await saveProjectToDB(project);
     }
     setProject(null);
@@ -123,7 +140,7 @@ function App() {
 
           <div className="space-y-6">
              <div>
-               <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2">Google Gemini API Key</label>
+               <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2">火山云 API Key</label>
                <input 
                  type="password" 
                  value={inputKey}
@@ -132,8 +149,8 @@ function App() {
                  className="w-full bg-[#141414] border border-zinc-800 text-white px-4 py-3 text-sm rounded-lg focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-900 transition-all font-mono placeholder:text-zinc-700"
                />
                <p className="mt-3 text-[10px] text-zinc-600 leading-relaxed">
-                  本应用需要 Gemini 2.5 Flash 及 Veo 视频生成权限。请确保您的 API Key 关联了已开通结算功能的 Google Cloud 项目。
-                  <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noreferrer" className="text-indigo-400 hover:underline ml-1">查看文档</a>
+                  本应用需要火山云 Doubao 模型权限（Chat: Doubao-Seed-1.8, Image: Doubao-Seedream4.5, Video: Doubao-Seedance1.5-pro）。请确保您的 API Key 已开通相应服务权限。
+                  <a href="https://www.volcengine.com/docs/8239" target="_blank" rel="noreferrer" className="text-indigo-400 hover:underline ml-1">查看文档</a>
                </p>
              </div>
 
@@ -175,6 +192,7 @@ function App() {
         setStage={setStage} 
         onExit={handleExitProject} 
         projectName={project.title}
+        onSettingsClick={() => setIsSettingsOpen(true)}
       />
       
       <main className="ml-72 flex-1 h-screen overflow-hidden relative">
@@ -195,6 +213,13 @@ function App() {
            )}
         </div>
       </main>
+      
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        currentApiKey={apiKey}
+        onApiKeyUpdate={setApiKey}
+      />
       
       <div className="lg:hidden fixed inset-0 bg-black z-[100] flex items-center justify-center p-8 text-center">
         <p className="text-zinc-500">为了获得最佳体验，请使用桌面浏览器访问。</p>

@@ -1,7 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Play, SkipForward, SkipBack, Loader2, Video, Image as ImageIcon, ArrowRight, LayoutGrid, Maximize2, Sparkles, AlertCircle, MapPin, User, Clock, ChevronLeft, ChevronRight, ArrowLeft, MessageSquare, X, Film, Aperture, Shirt } from 'lucide-react';
 import { ProjectState, Shot, Keyframe } from '../types';
-import { generateImage, generateVideo } from '../services/geminiService';
+import { generateImage, generateVideo, getVideoModelName, setGlobalApiKey } from '../services/doubaoService';
+import { logger } from '../utils/logger';
+import { getResourceUrl } from '../utils/resourceHelper';
 
 interface Props {
   project: ProjectState;
@@ -12,6 +14,7 @@ const StageDirector: React.FC<Props> = ({ project, updateProject }) => {
   const [activeShotId, setActiveShotId] = useState<string | null>(null);
   const [processingState, setProcessingState] = useState<{id: string, type: 'kf_start'|'kf_end'|'video'}|null>(null);
   const [batchProgress, setBatchProgress] = useState<{current: number, total: number, message: string} | null>(null);
+  const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | undefined>(undefined);
 
   const activeShotIndex = project.shots.findIndex(s => s.id === activeShotId);
   const activeShot = project.shots[activeShotIndex];
@@ -20,12 +23,71 @@ const StageDirector: React.FC<Props> = ({ project, updateProject }) => {
   const startKf = activeShot?.keyframes?.find(k => k.type === 'start');
   const endKf = activeShot?.keyframes?.find(k => k.type === 'end');
 
+  // 处理视频预览URL，确保localhost地址能够正确加载
+  useEffect(() => {
+    const loadVideoUrl = async () => {
+      const videoUrl = activeShot?.interval?.videoUrl;
+      if (!videoUrl) {
+        setVideoPreviewUrl(undefined);
+        return;
+      }
+
+      try {
+        // 使用 getResourceUrl 来处理 localhost 地址
+        const processedUrl = await getResourceUrl(videoUrl, 'videos');
+        setVideoPreviewUrl(processedUrl || videoUrl);
+      } catch (error: any) {
+        logger.warn('STAGE_DIRECTOR', '加载视频预览URL失败', { videoUrl, error });
+        // 如果处理失败，使用原始URL
+        setVideoPreviewUrl(videoUrl);
+      }
+    };
+
+    loadVideoUrl();
+  }, [activeShot?.interval?.videoUrl]);
+
   // Check if all start frames are generated
   const allStartFramesGenerated = project.shots.length > 0 && project.shots.every(s => s.keyframes?.find(k => k.type === 'start')?.imageUrl);
 
   const updateShot = (shotId: string, transform: (s: Shot) => Shot) => {
     const newShots = project.shots.map(s => s.id === shotId ? transform(s) : s);
     updateProject({ shots: newShots });
+  };
+
+  // 解析目标时长字符串，转换为秒数
+  const parseDurationToSeconds = (durationStr: string): number => {
+    if (!durationStr) return 3; // 默认3秒
+    
+    // 移除空格并转换为小写
+    const cleaned = durationStr.trim().toLowerCase();
+    
+    // 匹配格式：数字 + s (秒) 或 数字 + m (分钟)
+    const match = cleaned.match(/^(\d+)([sm])?$/);
+    if (!match) {
+      // 如果格式不匹配，尝试直接解析数字
+      const num = parseInt(cleaned.replace(/[^0-9]/g, ''));
+      return num || 3; // 默认3秒
+    }
+    
+    const value = parseInt(match[1]);
+    const unit = match[2] || 's'; // 默认为秒
+    
+    if (unit === 'm') {
+      return value * 60; // 分钟转秒
+    }
+    return value; // 秒
+  };
+
+  // 计算每个 shot 的平均时长
+  const calculateDefaultDuration = (): number => {
+    const totalShots = project.shots.length;
+    if (totalShots === 0) return 3; // 如果没有 shot，返回默认3秒
+    
+    const totalDurationSeconds = parseDurationToSeconds(project.targetDuration || '60s');
+    const averageDuration = totalDurationSeconds / totalShots;
+    
+    // 确保最小值为 1 秒，最大值为 10 秒（避免过长或过短）
+    return Math.max(1, Math.min(10, Math.round(averageDuration * 10) / 10));
   };
 
   const getRefImagesForShot = (shot: Shot) => {
@@ -64,6 +126,7 @@ const StageDirector: React.FC<Props> = ({ project, updateProject }) => {
   };
 
   const handleGenerateKeyframe = async (shot: Shot, type: 'start' | 'end') => {
+    logger.userAction(`生成${type === 'start' ? '起始' : '结束'}关键帧`, { projectId: project.id, shotId: shot.id, type });
     // Robustly handle missing keyframe object
     const existingKf = shot.keyframes?.find(k => k.type === type);
     const kfId = existingKf?.id || `kf-${shot.id}-${type}-${Date.now()}`;
@@ -73,6 +136,11 @@ const StageDirector: React.FC<Props> = ({ project, updateProject }) => {
     
     try {
       const referenceImages = getRefImagesForShot(shot);
+      logger.debug('STAGE_DIRECTOR', '生成关键帧', { 
+        shotId: shot.id,
+        type,
+        referenceImagesCount: referenceImages.length
+      });
       const url = await generateImage(prompt, referenceImages);
 
       updateProject({ 
@@ -98,8 +166,9 @@ const StageDirector: React.FC<Props> = ({ project, updateProject }) => {
            return { ...s, keyframes: newKeyframes };
         }) 
       });
+      logger.info('STAGE_DIRECTOR', '关键帧生成成功', { projectId: project.id, shotId: shot.id, type });
     } catch (e: any) {
-      console.error(e);
+      logger.error('STAGE_DIRECTOR', '关键帧生成失败', { projectId: project.id, shotId: shot.id, type, error: e });
       alert(`生成失败: ${e.message}`);
     } finally {
       setProcessingState(null);
@@ -107,32 +176,75 @@ const StageDirector: React.FC<Props> = ({ project, updateProject }) => {
   };
 
   const handleGenerateVideo = async (shot: Shot) => {
-    if (!shot.interval) return;
-    
+    logger.userAction('生成视频', { projectId: project.id, shotId: shot.id });
     const sKf = shot.keyframes?.find(k => k.type === 'start');
     const eKf = shot.keyframes?.find(k => k.type === 'end');
 
-    if (!sKf?.imageUrl) return alert("请先生成起始帧！");
+    if (!sKf?.imageUrl) {
+      logger.warn('STAGE_DIRECTOR', '生成视频失败：缺少起始帧', { projectId: project.id, shotId: shot.id });
+      return alert("请先生成起始帧！");
+    }
+
+    // 如果 interval 不存在，自动创建一个默认的
+    let interval = shot.interval;
+    if (!interval) {
+      const defaultDuration = calculateDefaultDuration();
+      logger.info('STAGE_DIRECTOR', '自动创建默认 interval', { 
+        projectId: project.id, 
+        shotId: shot.id,
+        targetDuration: project.targetDuration,
+        totalShots: project.shots.length,
+        calculatedDuration: defaultDuration
+      });
+      const startKfId = sKf.id;
+      const endKfId = eKf?.id || startKfId; // 如果没有结束帧，使用起始帧ID
+      
+      interval = {
+        id: `interval-${shot.id}-${Date.now()}`,
+        startKeyframeId: startKfId,
+        endKeyframeId: endKfId,
+        duration: defaultDuration, // 使用计算出的平均时长
+        motionStrength: 5, // 默认运动强度
+        status: 'pending'
+      };
+      
+      // 更新分镜，添加 interval
+      updateShot(shot.id, (s) => ({
+        ...s,
+        interval
+      }));
+    }
 
     // Fix: Remove logic that auto-grabs next shot's frame.
     // Prevent morphing artifacts by defaulting to Image-to-Video unless an End Frame is explicitly generated.
     let endImageUrl = eKf?.imageUrl;
     
-    setProcessingState({ id: shot.interval.id, type: 'video' });
+    // 确保 API Key 已设置（从 localStorage 读取）
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const storedKey = localStorage.getItem('cinegen_doubao_api_key');
+      if (storedKey) {
+        setGlobalApiKey(storedKey);
+        logger.debug('STAGE_DIRECTOR', '从 localStorage 恢复 API Key', { projectId: project.id });
+      }
+    }
+    
+    setProcessingState({ id: interval.id, type: 'video' });
     
     try {
       const videoUrl = await generateVideo(
           shot.actionSummary, 
           sKf.imageUrl, 
-          endImageUrl // Only pass if it exists
+          endImageUrl, // Only pass if it exists
+          interval.duration
       );
 
       updateShot(shot.id, (s) => ({
         ...s,
-        interval: s.interval ? { ...s.interval, videoUrl, status: 'completed' } : undefined
+        interval: s.interval ? { ...s.interval, videoUrl, status: 'completed' as const } : undefined
       }));
+      logger.info('STAGE_DIRECTOR', '视频生成成功', { projectId: project.id, shotId: shot.id });
     } catch (e: any) {
-      console.error(e);
+      logger.error('STAGE_DIRECTOR', '视频生成失败', { projectId: project.id, shotId: shot.id, error: e });
       alert(`视频生成失败: ${e.message}`);
     } finally {
       setProcessingState(null);
@@ -152,6 +264,12 @@ const StageDirector: React.FC<Props> = ({ project, updateProject }) => {
       }
       
       if (shotsToProcess.length === 0) return;
+      
+      logger.userAction('批量生成首帧图片', { 
+        projectId: project.id,
+        total: shotsToProcess.length,
+        isRegenerate
+      });
 
       setBatchProgress({ 
           current: 0, 
@@ -202,10 +320,14 @@ const StageDirector: React.FC<Props> = ({ project, updateProject }) => {
              updateProject({ shots: currentShots });
 
           } catch (e) {
-             console.error(`Failed to generate for shot ${shot.id}`, e);
+             logger.error('STAGE_DIRECTOR', '批量生成首帧失败', { projectId: project.id, shotId: shot.id, error: e });
           }
       }
 
+      logger.info('STAGE_DIRECTOR', '批量生成首帧完成', { 
+        projectId: project.id,
+        total: shotsToProcess.length
+      });
       setBatchProgress(null);
   };
 
@@ -542,14 +664,35 @@ const StageDirector: React.FC<Props> = ({ project, updateProject }) => {
                            <div className="flex items-center justify-between">
                                <h4 className="text-xs font-bold text-white uppercase tracking-widest flex items-center gap-2">
                                   <Video className="w-3 h-3 text-indigo-500" />
-                                  视频生成 (Veo)
+                                  视频生成 ({getVideoModelName()})
                                </h4>
                                {activeShot.interval?.status === 'completed' && <span className="text-[10px] text-green-500 font-mono flex items-center gap-1">● READY</span>}
                            </div>
                            
                            {activeShot.interval?.videoUrl ? (
                                <div className="w-full aspect-video bg-black rounded-lg overflow-hidden border border-zinc-700 relative shadow-lg">
-                                   <video src={activeShot.interval.videoUrl} controls className="w-full h-full" />
+                                   {videoPreviewUrl ? (
+                                       <video 
+                                           src={videoPreviewUrl} 
+                                           controls 
+                                           className="w-full h-full"
+                                           crossOrigin="anonymous"
+                                           onError={(e) => {
+                                               logger.error('STAGE_DIRECTOR', '视频加载失败', { 
+                                                   videoUrl: activeShot.interval?.videoUrl,
+                                                   processedUrl: videoPreviewUrl 
+                                               });
+                                               // 如果处理后的URL失败，尝试使用原始URL
+                                               if (videoPreviewUrl !== activeShot.interval?.videoUrl) {
+                                                   setVideoPreviewUrl(activeShot.interval?.videoUrl);
+                                               }
+                                           }}
+                                       />
+                                   ) : (
+                                       <div className="w-full h-full flex items-center justify-center">
+                                           <Loader2 className="w-6 h-6 text-indigo-500 animate-spin" />
+                                       </div>
+                                   )}
                                </div>
                            ) : (
                                <div className="w-full aspect-video bg-zinc-900/50 rounded-lg border border-dashed border-zinc-800 flex items-center justify-center">
