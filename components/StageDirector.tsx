@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Play, SkipForward, SkipBack, Loader2, Video, Image as ImageIcon, ArrowRight, LayoutGrid, Maximize2, Sparkles, AlertCircle, MapPin, User, Clock, ChevronLeft, ChevronRight, ArrowLeft, MessageSquare, X, Film, Aperture, Shirt } from 'lucide-react';
 import { ProjectState, Shot, Keyframe } from '../types';
 import { generateImage, generateVideo, getVideoModelName, setGlobalApiKey } from '../services/doubaoService';
@@ -15,6 +15,8 @@ const StageDirector: React.FC<Props> = ({ project, updateProject }) => {
   const [processingState, setProcessingState] = useState<{id: string, type: 'kf_start'|'kf_end'|'video'}|null>(null);
   const [batchProgress, setBatchProgress] = useState<{current: number, total: number, message: string} | null>(null);
   const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | undefined>(undefined);
+  const manuallySetVideoUrlRef = useRef<string | null>(null);
+  const videoPreviewUrlRef = useRef<string | undefined>(undefined);
 
   const activeShotIndex = project.shots.findIndex(s => s.id === activeShotId);
   const activeShot = project.shots[activeShotIndex];
@@ -28,29 +30,79 @@ const StageDirector: React.FC<Props> = ({ project, updateProject }) => {
     const loadVideoUrl = async () => {
       const videoUrl = activeShot?.interval?.videoUrl;
       if (!videoUrl) {
-        setVideoPreviewUrl(undefined);
+        // 只有在不是手动设置的情况下才清空
+        if (manuallySetVideoUrlRef.current === null) {
+          videoPreviewUrlRef.current = undefined;
+          setVideoPreviewUrl(undefined);
+        }
+        return;
+      }
+
+      // 如果这个 videoUrl 是手动设置的（新生成的视频），不要覆盖
+      if (manuallySetVideoUrlRef.current === videoUrl) {
+        logger.debug('STAGE_DIRECTOR', '跳过自动加载，使用手动设置的视频URL', { 
+          videoUrl, 
+          manualRef: manuallySetVideoUrlRef.current,
+          currentPreview: videoPreviewUrlRef.current ? `已设置: ${videoPreviewUrlRef.current.substring(0, 50)}...` : '未设置'
+        });
+        // 如果 videoPreviewUrl 还没有设置，说明异步函数可能还没完成，但应该已经设置了原始URL
+        // 如果确实没有设置，使用原始URL作为后备
+        if (!videoPreviewUrlRef.current) {
+          logger.warn('STAGE_DIRECTOR', '手动设置的预览URL未设置，使用原始URL作为后备', { videoUrl });
+          videoPreviewUrlRef.current = videoUrl;
+          setVideoPreviewUrl(videoUrl);
+        }
+        // 清除标记，下次切换镜头时可以正常加载（延迟清除，确保异步加载完成）
+        setTimeout(() => {
+          if (manuallySetVideoUrlRef.current === videoUrl) {
+            manuallySetVideoUrlRef.current = null;
+            logger.debug('STAGE_DIRECTOR', '已清除手动设置标记', { videoUrl });
+          }
+        }, 3000);
         return;
       }
 
       try {
         // 使用 getResourceUrl 来处理 localhost 地址
         const processedUrl = await getResourceUrl(videoUrl, 'videos');
-        setVideoPreviewUrl(processedUrl || videoUrl);
+        const finalUrl = processedUrl || videoUrl;
+        videoPreviewUrlRef.current = finalUrl;
+        setVideoPreviewUrl(finalUrl);
       } catch (error: any) {
         logger.warn('STAGE_DIRECTOR', '加载视频预览URL失败', { videoUrl, error });
         // 如果处理失败，使用原始URL
+        videoPreviewUrlRef.current = videoUrl;
         setVideoPreviewUrl(videoUrl);
       }
     };
 
-    loadVideoUrl();
-  }, [activeShot?.interval?.videoUrl]);
+    // 切换镜头时立即清空预览URL和标记，避免显示上一个镜头的视频
+    if (!activeShot?.interval?.videoUrl) {
+      videoPreviewUrlRef.current = undefined;
+      setVideoPreviewUrl(undefined);
+      manuallySetVideoUrlRef.current = null;
+    } else {
+      loadVideoUrl();
+    }
+  }, [activeShotId, activeShot?.interval?.videoUrl]);
+
+  // 调试：监听 videoPreviewUrl 的变化
+  useEffect(() => {
+    if (videoPreviewUrl) {
+      logger.debug('STAGE_DIRECTOR', 'videoPreviewUrl 状态已更新', { 
+        previewUrl: videoPreviewUrl.substring(0, 50) + '...',
+        shotId: activeShot?.id,
+        hasVideoUrl: !!activeShot?.interval?.videoUrl
+      });
+    }
+  }, [videoPreviewUrl, activeShot?.id]);
 
   // Check if all start frames are generated
   const allStartFramesGenerated = project.shots.length > 0 && project.shots.every(s => s.keyframes?.find(k => k.type === 'start')?.imageUrl);
 
   const updateShot = (shotId: string, transform: (s: Shot) => Shot) => {
     const newShots = project.shots.map(s => s.id === shotId ? transform(s) : s);
+    logger.debug('STAGE_DIRECTOR', '更新分镜', { projectId: project.id, shotId, newShots });
     updateProject({ shots: newShots });
   };
 
@@ -238,11 +290,51 @@ const StageDirector: React.FC<Props> = ({ project, updateProject }) => {
           interval.duration
       );
 
+      logger.info('STAGE_DIRECTOR', '视频生成成功', { videoUrl, status: interval.status });
+      logger.info('STAGE_DIRECTOR', '更新分镜', { projectId: project.id, shotId: shot.id, interval: { ...interval, videoUrl, status: 'completed' as const } });
+      // 更新项目数据
       updateShot(shot.id, (s) => ({
         ...s,
-        interval: s.interval ? { ...s.interval, videoUrl, status: 'completed' as const } : undefined
+        interval: { ...interval, videoUrl, status: 'completed' as const }
       }));
-      logger.info('STAGE_DIRECTOR', '视频生成成功', { projectId: project.id, shotId: shot.id });
+      
+      // 如果当前正在查看这个镜头，立即设置预览URL
+      // 在 updateShot 之后执行，确保 activeShot 已更新
+      if (activeShotId === shot.id) {
+        // 先标记，防止 useEffect 覆盖
+        manuallySetVideoUrlRef.current = videoUrl;
+        
+        // 立即设置原始URL，确保视频可以立即显示
+        logger.info('STAGE_DIRECTOR', '立即设置视频预览URL（原始）', { videoUrl });
+        videoPreviewUrlRef.current = videoUrl;
+        setVideoPreviewUrl(videoUrl);
+        logger.info('STAGE_DIRECTOR', '已调用setVideoPreviewUrl，当前ref值', { 
+          refValue: videoPreviewUrlRef.current,
+          shotId: shot.id,
+          activeShotId 
+        });
+        
+        // 然后异步加载处理后的URL（base64 data URL）
+        getResourceUrl(videoUrl, 'videos')
+          .then((processedUrl) => {
+            const finalUrl = processedUrl || videoUrl;
+            logger.info('STAGE_DIRECTOR', '加载新生成的视频预览URL成功（处理后）', { 
+              processedUrl: finalUrl?.substring(0, 50) + '...', 
+              videoUrl 
+            });
+            // 再次检查是否还在查看同一个镜头，避免切换镜头后设置错误的URL
+            if (activeShotId === shot.id && manuallySetVideoUrlRef.current === videoUrl) {
+              videoPreviewUrlRef.current = finalUrl;
+              setVideoPreviewUrl(finalUrl);
+              logger.info('STAGE_DIRECTOR', '已更新视频预览URL为处理后的URL', { finalUrl: finalUrl?.substring(0, 50) + '...' });
+            }
+          })
+          .catch((error: any) => {
+            logger.warn('STAGE_DIRECTOR', '加载新生成的视频预览URL失败，使用原始URL', { videoUrl, error });
+            // 如果处理失败，保持使用原始URL（已经设置了）
+          });
+      }
+      logger.info('STAGE_DIRECTOR', '视频生成成功', { projectId: project.id, shotId: shot.id, status: interval.status, videoUrl: videoUrl, previewUrl: videoPreviewUrl });
     } catch (e: any) {
       logger.error('STAGE_DIRECTOR', '视频生成失败', { projectId: project.id, shotId: shot.id, error: e });
       alert(`视频生成失败: ${e.message}`);
@@ -673,19 +765,57 @@ const StageDirector: React.FC<Props> = ({ project, updateProject }) => {
                                <div className="w-full aspect-video bg-black rounded-lg overflow-hidden border border-zinc-700 relative shadow-lg">
                                    {videoPreviewUrl ? (
                                        <video 
+                                           key={`video-${activeShot.id}-${activeShot.interval.videoUrl}`}
                                            src={videoPreviewUrl} 
                                            controls 
+                                           autoPlay={false}
                                            className="w-full h-full"
                                            crossOrigin="anonymous"
-                                           onError={(e) => {
+                                           onLoadStart={() => {
+                                               logger.info('STAGE_DIRECTOR', '视频开始加载', { 
+                                                   videoUrl: activeShot.interval?.videoUrl,
+                                                   previewUrl: videoPreviewUrl?.substring(0, 50) + '...',
+                                                   shotId: activeShot.id
+                                               });
+                                           }}
+                                           onError={(e: any) => {
+                                               const target = e.target as HTMLVideoElement;
                                                logger.error('STAGE_DIRECTOR', '视频加载失败', { 
                                                    videoUrl: activeShot.interval?.videoUrl,
-                                                   processedUrl: videoPreviewUrl 
+                                                   previewUrl: videoPreviewUrl?.substring(0, 50) + '...',
+                                                   error: target.error,
+                                                   networkState: target.networkState,
+                                                   readyState: target.readyState
                                                });
                                                // 如果处理后的URL失败，尝试使用原始URL
-                                               if (videoPreviewUrl !== activeShot.interval?.videoUrl) {
-                                                   setVideoPreviewUrl(activeShot.interval?.videoUrl);
+                                               if (videoPreviewUrl && videoPreviewUrl !== activeShot.interval?.videoUrl) {
+                                                   logger.info('STAGE_DIRECTOR', '尝试使用原始URL', { 
+                                                       originalUrl: activeShot.interval?.videoUrl 
+                                                   });
+                                                   videoPreviewUrlRef.current = activeShot.interval.videoUrl;
+                                                   setVideoPreviewUrl(activeShot.interval.videoUrl);
                                                }
+                                           }}
+                                           onLoadedMetadata={() => {
+                                               logger.info('STAGE_DIRECTOR', '视频元数据加载完成', { 
+                                                   videoUrl: activeShot.interval?.videoUrl
+                                               });
+                                           }}
+                                           onLoadedData={() => {
+                                               logger.info('STAGE_DIRECTOR', '视频数据加载完成', { 
+                                                   videoUrl: activeShot.interval?.videoUrl,
+                                                   previewUrl: videoPreviewUrl?.substring(0, 50) + '...'
+                                               });
+                                           }}
+                                           onCanPlay={() => {
+                                               logger.info('STAGE_DIRECTOR', '视频可以播放', { 
+                                                   videoUrl: activeShot.interval?.videoUrl
+                                               });
+                                           }}
+                                           onCanPlayThrough={() => {
+                                               logger.info('STAGE_DIRECTOR', '视频可以完整播放', { 
+                                                   videoUrl: activeShot.interval?.videoUrl
+                                               });
                                            }}
                                        />
                                    ) : (
