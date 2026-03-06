@@ -1,6 +1,6 @@
 import { ScriptData, Shot, Character, Scene } from "../types";
 import { logger } from "../utils/logger";
-import { saveFileToServer, generateFilename } from "./fileService";
+import { saveFileToServer, generateFilename, getFileServerBase } from "./fileService";
 
 // Module-level variable to store the key at runtime
 let runtimeApiKey: string = process.env.API_KEY || "";
@@ -556,7 +556,15 @@ export const generateImage = async (prompt: string, referenceImages: string[] = 
 
       // If it's a URL, fetch it and convert to base64 data URL
       if (imageUrl.startsWith('http')) {
-        const imgResponse = await fetch(imageUrl);
+        // 浏览器环境走后端代理，避免 CDN 的 CORS 限制
+        const isBrowser = typeof Buffer === 'undefined';
+        const fetchUrl = isBrowser
+          ? `${getFileServerBase()}/api/proxy-image?url=${encodeURIComponent(imageUrl)}`
+          : imageUrl;
+        const imgResponse = await fetch(fetchUrl);
+        if (!imgResponse.ok) {
+          throw new Error(`Failed to fetch image: ${imgResponse.status}`);
+        }
         // Use Buffer in Node.js, Blob in browser
         let dataUrl: string;
         if (typeof Buffer !== 'undefined') {
@@ -568,7 +576,7 @@ export const generateImage = async (prompt: string, referenceImages: string[] = 
           const contentType = imgResponse.headers.get('content-type') || 'image/png';
           dataUrl = `data:${contentType};base64,${base64}`;
         } else {
-          // Browser environment
+          // Browser environment (response is from our proxy)
           const blob = await imgResponse.blob();
           dataUrl = await new Promise<string>((resolve, reject) => {
             const reader = new FileReader();

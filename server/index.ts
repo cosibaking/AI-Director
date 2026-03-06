@@ -31,11 +31,17 @@ const ensureDir = (dirPath: string) => {
 
 ensureDir(baseStoragePath);
 
+/** 规范化用于路径的用户名/类型：去除首尾空白与非法路径字符 */
+const sanitizePathSegment = (value: string): string => {
+  const trimmed = (value || '').trim().replace(/[/\\:*?"<>|]/g, '_');
+  return trimmed || 'default';
+};
+
 // 配置 multer 用于文件上传
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const username = req.body.username || 'default';
-    const resourceType = req.body.resourceType || 'unknown';
+    const username = sanitizePathSegment(req.body.username || 'default');
+    const resourceType = sanitizePathSegment(req.body.resourceType || 'unknown');
     const userDir = path.join(baseStoragePath, username);
     const typeDir = path.join(userDir, resourceType);
     
@@ -70,8 +76,10 @@ app.post('/api/files/save', async (req, res) => {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    const userDir = path.join(baseStoragePath, username);
-    const typeDir = path.join(userDir, resourceType);
+    const safeUsername = sanitizePathSegment(username);
+    const safeResourceType = sanitizePathSegment(resourceType);
+    const userDir = path.join(baseStoragePath, safeUsername);
+    const typeDir = path.join(userDir, safeResourceType);
     ensureDir(userDir);
     ensureDir(typeDir);
 
@@ -105,8 +113,8 @@ app.post('/api/files/save', async (req, res) => {
     const filePath = path.join(typeDir, finalFilename);
     fs.writeFileSync(filePath, buffer);
 
-    // 返回文件 URL
-    const fileUrl = `/api/files/get/${username}/${resourceType}/${finalFilename}`;
+    // 返回文件 URL（使用规范化后的路径段）
+    const fileUrl = `/api/files/get/${safeUsername}/${safeResourceType}/${finalFilename}`;
     
     res.json({
       success: true,
@@ -124,14 +132,16 @@ app.post('/api/files/save', async (req, res) => {
 app.get('/api/files/get/:username/:resourceType/:filename', (req, res) => {
   try {
     const { username, resourceType, filename } = req.params;
-    const filePath = path.join(baseStoragePath, username, resourceType, filename);
+    const safeUsername = sanitizePathSegment(username);
+    const safeResourceType = sanitizePathSegment(resourceType);
+    const safeFilename = path.basename(filename);
+    const filePath = path.join(baseStoragePath, safeUsername, safeResourceType, safeFilename);
     
     if (!fs.existsSync(filePath)) {
       return res.status(404).json({ error: 'File not found' });
     }
 
     // 设置正确的 Content-Type
-    const ext = path.extname(filename).toLowerCase();
     const mimeTypes: { [key: string]: string } = {
       '.png': 'image/png',
       '.jpg': 'image/jpeg',
@@ -140,7 +150,7 @@ app.get('/api/files/get/:username/:resourceType/:filename', (req, res) => {
       '.webm': 'video/webm'
     };
     
-    const contentType = mimeTypes[ext] || 'application/octet-stream';
+    const contentType = mimeTypes[path.extname(safeFilename).toLowerCase()] || 'application/octet-stream';
     res.setHeader('Content-Type', contentType);
     
     // 发送文件
@@ -156,20 +166,22 @@ app.get('/api/files/get/:username/:resourceType/:filename', (req, res) => {
 app.get('/api/files/list/:username/:resourceType?', (req, res) => {
   try {
     const { username, resourceType } = req.params;
-    const userDir = path.join(baseStoragePath, username);
+    const safeUsername = sanitizePathSegment(username);
+    const userDir = path.join(baseStoragePath, safeUsername);
     
     if (!fs.existsSync(userDir)) {
       return res.json({ files: [] });
     }
 
     if (resourceType) {
-      const typeDir = path.join(userDir, resourceType);
+      const safeResourceType = sanitizePathSegment(resourceType);
+      const typeDir = path.join(userDir, safeResourceType);
       if (!fs.existsSync(typeDir)) {
         return res.json({ files: [] });
       }
       const files = fs.readdirSync(typeDir).map(filename => ({
         filename,
-        url: `/api/files/get/${username}/${resourceType}/${filename}`
+        url: `/api/files/get/${safeUsername}/${safeResourceType}/${filename}`
       }));
       return res.json({ files });
     } else {
@@ -183,7 +195,7 @@ app.get('/api/files/list/:username/:resourceType?', (req, res) => {
         const typeDir = path.join(userDir, type);
         result[type] = fs.readdirSync(typeDir).map(filename => ({
           filename,
-          url: `/api/files/get/${username}/${type}/${filename}`
+          url: `/api/files/get/${safeUsername}/${type}/${filename}`
         }));
       });
       
@@ -192,6 +204,31 @@ app.get('/api/files/list/:username/:resourceType?', (req, res) => {
   } catch (error: any) {
     console.error('List files error:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// 图片代理：解决浏览器端 fetch 跨域 CDN 图片时的 CORS 问题
+app.get('/api/proxy-image', async (req, res) => {
+  try {
+    const url = req.query.url as string;
+    if (!url || typeof url !== 'string') {
+      return res.status(400).json({ error: 'Missing url parameter' });
+    }
+    // 仅允许 HTTPS 且为火山引擎 CDN，防止 SSRF
+    if (!url.startsWith('https://') || !url.includes('volces.com')) {
+      return res.status(400).json({ error: 'Invalid image URL' });
+    }
+    const imgResponse = await fetch(url, { method: 'GET' });
+    if (!imgResponse.ok) {
+      return res.status(imgResponse.status).send(imgResponse.statusText);
+    }
+    const contentType = imgResponse.headers.get('content-type') || 'image/png';
+    res.setHeader('Content-Type', contentType);
+    const arrayBuffer = await imgResponse.arrayBuffer();
+    res.send(Buffer.from(arrayBuffer));
+  } catch (error: any) {
+    console.error('Proxy image error:', error);
+    res.status(500).json({ error: error.message || 'Proxy failed' });
   }
 });
 

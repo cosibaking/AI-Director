@@ -4,16 +4,19 @@ const API_BASE = import.meta.env.DEV
   ? 'http://localhost:3001'
   : window.location.origin;
 
+/** 文件服务/后端 API 根地址，用于代理等请求 */
+export const getFileServerBase = (): string => API_BASE;
+
 // 获取当前用户名（从 localStorage 或使用默认值）
 const getUsername = (): string => {
   if (typeof window !== 'undefined' && window.localStorage) {
     const username = localStorage.getItem('cinegen_username');
-    if (username) return username;
+    if (username) return username.trim();
     
     // 如果没有用户名，使用 API Key 的前8位作为标识
     const apiKey = localStorage.getItem('cinegen_doubao_api_key');
     if (apiKey) {
-      const userHash = apiKey.substring(0, 8);
+      const userHash = apiKey.substring(0, 8).trim();
       localStorage.setItem('cinegen_username', userHash);
       return userHash;
     }
