@@ -288,7 +288,8 @@ const StageDirector: React.FC<Props> = ({ project, updateProject }) => {
           shot.actionSummary, 
           sKf.imageUrl, 
           endImageUrl, // Only pass if it exists
-          durationToUse
+          durationToUse,
+          shot.dialogue
       );
 
       logger.info('STAGE_DIRECTOR', '视频生成成功', { videoUrl, status: interval.status });

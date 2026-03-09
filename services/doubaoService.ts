@@ -750,10 +750,11 @@ const convertImageUrlToBase64 = async (imageUrl: string | undefined): Promise<st
  * - 查询任务：https://www.volcengine.com/docs/82379/1521309?lang=zh
  * Supports Start Image -> Video OR Start Image + End Image -> Video
  */
-export const generateVideo = async (prompt: string, startImageBase64?: string, endImageBase64?: string, duration?: number): Promise<string> => {
+export const generateVideo = async (prompt: string, startImageBase64?: string, endImageBase64?: string, duration?: number, dialogue?: string): Promise<string> => {
   checkApiKey();
+  const finalPrompt = dialogue ? `${prompt}\n${dialogue}`.trim() : prompt;
   logger.info('VIDEO', '开始生成视频', { 
-    promptLength: prompt.length,
+    promptLength: finalPrompt.length,
     hasStartImage: !!startImageBase64,
     hasEndImage: !!endImageBase64
   });
@@ -766,7 +767,7 @@ export const generateVideo = async (prompt: string, startImageBase64?: string, e
   // 根据火山引擎文档，content字段应该是数组格式，包含文本和图片
   // 图片可以使用base64格式的data URL
   const contentArray: any[] = [
-    { type: 'text', text: prompt }
+    { type: 'text', text: finalPrompt }
   ];
   
   // 添加起始图片（如果提供）
