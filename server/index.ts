@@ -128,7 +128,44 @@ app.post('/api/files/save', async (req, res) => {
   }
 });
 
-// 获取文件
+// 按 URL 拉取视频并保存到本地（服务端请求无 CORS，用于生成后落盘）
+app.post('/api/files/fetch-video', async (req, res) => {
+  try {
+    const { url, username } = req.body;
+    if (!url || typeof url !== 'string') {
+      return res.status(400).json({ error: 'Missing url parameter' });
+    }
+    const isVolcCdn = url.startsWith('https://') && url.includes('volces.com');
+    const isOwnFileUrl =
+      (url.startsWith('http://localhost:') || url.startsWith('http://127.0.0.1:')) &&
+      url.includes('/api/files/get/');
+    if (!isVolcCdn && !isOwnFileUrl) {
+      return res.status(400).json({ error: 'Invalid video URL' });
+    }
+    const safeUsername = sanitizePathSegment(username || 'default');
+    const userDir = path.join(baseStoragePath, safeUsername);
+    const typeDir = path.join(userDir, 'videos');
+    ensureDir(userDir);
+    ensureDir(typeDir);
+    const timestamp = Date.now();
+    const random = Math.random().toString(36).substring(2, 8);
+    const finalFilename = `video_${timestamp}_${random}.mp4`;
+    const filePath = path.join(typeDir, finalFilename);
+
+    const videoResponse = await fetch(url, { method: 'GET' });
+    if (!videoResponse.ok) {
+      return res.status(videoResponse.status).json({ error: videoResponse.statusText });
+    }
+    const arrayBuffer = await videoResponse.arrayBuffer();
+    fs.writeFileSync(filePath, Buffer.from(arrayBuffer));
+
+    const fileUrl = `/api/files/get/${safeUsername}/videos/${finalFilename}`;
+    res.json({ success: true, url: fileUrl, filename: finalFilename });
+  } catch (error: any) {
+    console.error('Fetch video error:', error);
+    res.status(500).json({ error: error.message || 'Fetch video failed' });
+  }
+});
 app.get('/api/files/get/:username/:resourceType/:filename', (req, res) => {
   try {
     const { username, resourceType, filename } = req.params;

@@ -1,7 +1,7 @@
 import { ref } from "process";
 import { ScriptData, Shot, Character, Scene } from "../types";
 import { logger } from "../utils/logger";
-import { saveFileToServer, generateFilename, getFileServerBase } from "./fileService";
+import { saveFileToServer, fetchVideoAndSaveToServer, generateFilename, getFileServerBase } from "./fileService";
 
 // Module-level variable to store the key at runtime
 let runtimeApiKey: string = process.env.API_KEY || "";
@@ -919,10 +919,16 @@ export const generateVideo = async (prompt: string, startImageBase64?: string, e
           videoUrlType: videoUrl.startsWith('http') ? 'HTTP URL' : 'Other'
         });
         
-        // 如果返回的是 HTTP URL：不在此处下载（浏览器 fetch 会触发 CORS），
-        // 前端通过 getResourceUrl 使用 /api/proxy-video 代理播放
+        // 如果返回的是 HTTP URL：由服务端拉取并保存到 UserSaved/username/videos/，再返回本地 URL
         if (videoUrl.startsWith('http')) {
-          return videoUrl;
+          try {
+            const serverUrl = await fetchVideoAndSaveToServer(videoUrl);
+            logger.info('VIDEO', '视频已保存到服务器', { serverUrl });
+            return serverUrl;
+          } catch (saveError: any) {
+            logger.warn('VIDEO', '视频保存到服务器失败，使用原始 URL（播放走代理）', { error: saveError });
+            return videoUrl;
+          }
         }
         
         // 如果已经是 base64 data URL，直接保存

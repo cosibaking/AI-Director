@@ -68,7 +68,20 @@ export const saveFileToServer = async (
   }
 };
 
-// 从服务器获取文件
+/** 让服务端按 URL 拉取视频并保存到 UserSaved/username/videos/，返回本地文件 URL */
+export const fetchVideoAndSaveToServer = async (videoUrl: string): Promise<string> => {
+  const response = await fetch(`${API_BASE}/api/files/fetch-video`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url: videoUrl, username: getUsername() })
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(err.error || `Fetch video failed: ${response.status}`);
+  }
+  const result = await response.json();
+  return `${API_BASE}${result.url}`;
+};
 export const getFileFromServer = async (
   resourceType: 'images' | 'videos',
   filename: string
