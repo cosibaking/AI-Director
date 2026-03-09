@@ -1,4 +1,4 @@
-import { getFromCache, getFile } from '../services/fileService';
+import { getFromCache, getFile, getFileServerBase } from '../services/fileService';
 import { logger } from './logger';
 
 /**
@@ -54,9 +54,12 @@ export const getResourceUrl = async (
     }
   }
 
-  // 如果是 HTTP URL（包括 localhost），直接返回
-  // 对于 localhost 地址，浏览器应该能够直接访问（如果服务器配置了正确的 CORS）
+  // 如果是 HTTP URL：视频走代理避免 CORS（与图片 proxy-image 一致），其余直接返回
   if (url.startsWith('http')) {
+    if (resourceType === 'videos' && url.includes('volces.com')) {
+      const base = getFileServerBase();
+      return `${base}/api/proxy-video?url=${encodeURIComponent(url)}`;
+    }
     return url;
   }
 

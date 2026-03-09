@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Play, SkipForward, SkipBack, Loader2, Video, Image as ImageIcon, ArrowRight, LayoutGrid, Maximize2, Sparkles, AlertCircle, MapPin, User, Clock, ChevronLeft, ChevronRight, ArrowLeft, MessageSquare, X, Film, Aperture, Shirt } from 'lucide-react';
 import { ProjectState, Shot, Keyframe } from '../types';
 import { generateImage, generateVideo, getVideoModelName, setGlobalApiKey } from '../services/doubaoService';
+import { getKeyframeRefsWithMatch } from '../services/keyframeRefMatch';
 import { logger } from '../utils/logger';
 import { getResourceUrl } from '../utils/resourceHelper';
 
@@ -15,6 +16,7 @@ const StageDirector: React.FC<Props> = ({ project, updateProject }) => {
   const [processingState, setProcessingState] = useState<{id: string, type: 'kf_start'|'kf_end'|'video'}|null>(null);
   const [batchProgress, setBatchProgress] = useState<{current: number, total: number, message: string} | null>(null);
   const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | undefined>(undefined);
+  const [pendingVideoDuration, setPendingVideoDuration] = useState<Record<string, number>>({});
   const manuallySetVideoUrlRef = useRef<string | null>(null);
   const videoPreviewUrlRef = useRef<string | undefined>(undefined);
 
@@ -130,16 +132,13 @@ const StageDirector: React.FC<Props> = ({ project, updateProject }) => {
     return value; // 秒
   };
 
-  // 计算每个 shot 的平均时长
+  // 计算每个 shot 的平均时长（视频时长规范：4～14 秒整数）
   const calculateDefaultDuration = (): number => {
     const totalShots = project.shots.length;
-    if (totalShots === 0) return 3; // 如果没有 shot，返回默认3秒
-    
+    if (totalShots === 0) return 4;
     const totalDurationSeconds = parseDurationToSeconds(project.targetDuration || '60s');
     const averageDuration = totalDurationSeconds / totalShots;
-    
-    // 确保最小值为 1 秒，最大值为 10 秒（避免过长或过短）
-    return Math.max(1, Math.min(10, Math.round(averageDuration * 10) / 10));
+    return Math.max(4, Math.min(14, Math.round(averageDuration)));
   };
 
   const getRefImagesForShot = (shot: Shot) => {
@@ -187,13 +186,14 @@ const StageDirector: React.FC<Props> = ({ project, updateProject }) => {
     setProcessingState({ id: kfId, type: type === 'start' ? 'kf_start' : 'kf_end' });
     
     try {
-      const referenceImages = getRefImagesForShot(shot);
+      const { imageUrls, refMap } = getKeyframeRefsWithMatch(shot, project.scriptData ?? null);
       logger.debug('STAGE_DIRECTOR', '生成关键帧', { 
         shotId: shot.id,
         type,
-        referenceImagesCount: referenceImages.length
+        referenceImagesCount: imageUrls.length,
+        refMapCount: refMap.length
       });
-      const url = await generateImage(prompt, referenceImages);
+      const url = await generateImage(prompt, imageUrls, 'keyframe', refMap.length > 0 ? { refMap } : undefined);
 
       updateProject({ 
         shots: project.shots.map(s => {
@@ -255,7 +255,7 @@ const StageDirector: React.FC<Props> = ({ project, updateProject }) => {
         id: `interval-${shot.id}-${Date.now()}`,
         startKeyframeId: startKfId,
         endKeyframeId: endKfId,
-        duration: defaultDuration, // 使用计算出的平均时长
+        duration: Math.max(4, Math.min(14, Math.round(pendingVideoDuration[shot.id] ?? defaultDuration))),
         motionStrength: 5, // 默认运动强度
         status: 'pending'
       };
@@ -283,11 +283,12 @@ const StageDirector: React.FC<Props> = ({ project, updateProject }) => {
     setProcessingState({ id: interval.id, type: 'video' });
     
     try {
+      const durationToUse = interval.duration;
       const videoUrl = await generateVideo(
           shot.actionSummary, 
           sKf.imageUrl, 
           endImageUrl, // Only pass if it exists
-          interval.duration
+          durationToUse
       );
 
       logger.info('STAGE_DIRECTOR', '视频生成成功', { videoUrl, status: interval.status });
@@ -387,8 +388,8 @@ const StageDirector: React.FC<Props> = ({ project, updateProject }) => {
              const prompt = existingKf?.visualPrompt || shot.actionSummary;
              const kfId = existingKf?.id || `kf-${shot.id}-start-${Date.now()}`;
 
-             const referenceImages = getRefImagesForShot(shot);
-             const url = await generateImage(prompt, referenceImages);
+             const { imageUrls, refMap } = getKeyframeRefsWithMatch(shot, project.scriptData ?? null);
+             const url = await generateImage(prompt, imageUrls, 'keyframe', refMap.length > 0 ? { refMap } : undefined);
 
              currentShots = currentShots.map(s => {
                 if (s.id !== shot.id) return s;
@@ -759,6 +760,31 @@ const StageDirector: React.FC<Props> = ({ project, updateProject }) => {
                                   视频生成 ({getVideoModelName()})
                                </h4>
                                {activeShot.interval?.status === 'completed' && <span className="text-[10px] text-green-500 font-mono flex items-center gap-1">● READY</span>}
+                           </div>
+                           
+                           {/* 视频时长参数：4～14 秒整数 */}
+                           <div className="flex items-center justify-between gap-3">
+                               <label className="text-[11px] text-zinc-400 uppercase tracking-wider font-medium">视频时长 (秒)</label>
+                               <input
+                                   type="number"
+                                   min={4}
+                                   max={14}
+                                   step={1}
+                                   value={Math.max(4, Math.min(14, Math.round(activeShot.interval?.duration ?? pendingVideoDuration[activeShot?.id ?? ''] ?? 4)))}
+                                   onChange={(e) => {
+                                       const v = Math.round(parseFloat(e.target.value));
+                                       if (Number.isNaN(v) || v < 4 || v > 14) return;
+                                       if (activeShot.interval) {
+                                           updateShot(activeShot.id, (s) => ({
+                                               ...s,
+                                               interval: s.interval ? { ...s.interval, duration: v } : undefined
+                                           }));
+                                       } else {
+                                           setPendingVideoDuration((prev) => ({ ...prev, [activeShot.id]: v }));
+                                       }
+                                   }}
+                                   className="w-20 h-8 px-2 rounded bg-zinc-800 border border-zinc-700 text-white text-xs font-mono text-right focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+                               />
                            </div>
                            
                            {activeShot.interval?.videoUrl ? (

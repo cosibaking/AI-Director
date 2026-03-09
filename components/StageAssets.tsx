@@ -27,19 +27,19 @@ const StageAssets: React.FC<Props> = ({ project, updateProject }) => {
       if (type === 'character') {
         const char = project.scriptData?.characters.find(c => String(c.id) === String(id));
         if (char) {
-          prompt = char.visualPrompt || await generateVisualPrompts('character', char, project.scriptData?.genre || 'Cinematic');
+          prompt = char.visualPrompt || await generateVisualPrompts('character', char, project.scriptData?.genre || 'Cinematic', project.scriptData?.style || '写实');
           logger.debug('STAGE_ASSETS', '生成角色图片', { characterId: id, characterName: char.name, hasExistingPrompt: !!char.visualPrompt });
         }
       } else {
         const scene = project.scriptData?.scenes.find(s => String(s.id) === String(id));
         if (scene) {
-          prompt = scene.visualPrompt || await generateVisualPrompts('scene', scene, project.scriptData?.genre || 'Cinematic');
+          prompt = scene.visualPrompt || await generateVisualPrompts('scene', scene, project.scriptData?.genre || 'Cinematic', project.scriptData?.style || '写实');
           logger.debug('STAGE_ASSETS', '生成场景图片', { sceneId: id, location: scene.location, hasExistingPrompt: !!scene.visualPrompt });
         }
       }
 
       // Real API Call
-      const imageUrl = await generateImage(prompt);
+      const imageUrl = await generateImage(prompt, [], type);
 
       // Update state
       if (project.scriptData) {
@@ -137,7 +137,7 @@ const StageAssets: React.FC<Props> = ({ project, updateProject }) => {
           // Enhance prompt to emphasize character consistency
           const enhancedPrompt = `Character: ${char.name}. ${variation.visualPrompt}. Keep facial features consistent with reference.`;
           
-          const imageUrl = await generateImage(enhancedPrompt, refImages);
+          const imageUrl = await generateImage(enhancedPrompt, refImages, 'character');
 
           const newData = { ...project.scriptData! };
           const c = newData.characters.find(c => c.id === charId);

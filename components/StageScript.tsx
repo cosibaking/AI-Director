@@ -27,6 +27,11 @@ const LANGUAGE_OPTIONS = [
   { label: 'Español (Spanish)', value: 'Spanish' }
 ];
 
+const STYLE_OPTIONS = [
+  { label: '写实', value: '写实' },
+  { label: '漫画', value: '漫画' }
+];
+
 const StageScript: React.FC<Props> = ({ project, updateProject }) => {
   const [activeTab, setActiveTab] = useState<TabMode>(project.scriptData ? 'script' : 'story');
   
@@ -34,6 +39,7 @@ const StageScript: React.FC<Props> = ({ project, updateProject }) => {
   const [localTitle, setLocalTitle] = useState(project.title);
   const [localDuration, setLocalDuration] = useState(project.targetDuration || '60s');
   const [localLanguage, setLocalLanguage] = useState(project.language || '中文');
+  const [localStyle, setLocalStyle] = useState(project.style || '写实');
   const [customDurationInput, setCustomDurationInput] = useState('');
   
   const [isProcessing, setIsProcessing] = useState(false);
@@ -44,6 +50,7 @@ const StageScript: React.FC<Props> = ({ project, updateProject }) => {
     setLocalTitle(project.title);
     setLocalDuration(project.targetDuration || '60s');
     setLocalLanguage(project.language || '中文');
+    setLocalStyle(project.style || '写实');
   }, [project.id]);
 
   const handleDurationSelect = (val: string) => {
@@ -85,6 +92,7 @@ const StageScript: React.FC<Props> = ({ project, updateProject }) => {
         rawScript: localScript,
         targetDuration: finalDuration,
         language: localLanguage,
+        style: localStyle,
         isParsingScript: true
       });
 
@@ -92,6 +100,7 @@ const StageScript: React.FC<Props> = ({ project, updateProject }) => {
       
       scriptData.targetDuration = finalDuration;
       scriptData.language = localLanguage;
+      scriptData.style = localStyle;
 
       if (localTitle && localTitle !== "未命名项目") {
         scriptData.title = localTitle;
@@ -202,6 +211,28 @@ const StageScript: React.FC<Props> = ({ project, updateProject }) => {
                   />
                 </div>
               )}
+            </div>
+
+            {/* Style Selection */}
+            <div className="space-y-2">
+              <label className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-2">
+                风格设定
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {STYLE_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setLocalStyle(opt.value)}
+                    className={`px-2 py-2.5 text-[11px] font-medium rounded-md transition-all text-center border ${
+                      localStyle === opt.value
+                        ? 'bg-zinc-100 text-black border-zinc-100 shadow-sm'
+                        : 'bg-transparent border-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
             </div>
         </div>
 

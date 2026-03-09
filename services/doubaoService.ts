@@ -1,3 +1,4 @@
+import { ref } from "process";
 import { ScriptData, Shot, Character, Scene } from "../types";
 import { logger } from "../utils/logger";
 import { saveFileToServer, generateFilename, getFileServerBase } from "./fileService";
@@ -29,7 +30,7 @@ const CHAT_MODEL = (typeof process !== 'undefined' && process.env?.DOUBAO_CHAT_E
 
 const IMAGE_MODEL = (typeof process !== 'undefined' && process.env?.DOUBAO_IMAGE_ENDPOINT)
   || (typeof globalThis !== 'undefined' && (globalThis as any).DOUBAO_IMAGE_ENDPOINT)
-  || "doubao-seedream-4-5-251128"; // 默认值，需要在控制台配置endpoint后替换
+  || "doubao-seedream-5-0-260128"; // 默认值，需要在控制台配置endpoint后替换
 
 const VIDEO_MODEL = (typeof process !== 'undefined' && process.env?.DOUBAO_VIDEO_ENDPOINT)
   || (typeof globalThis !== 'undefined' && (globalThis as any).DOUBAO_VIDEO_ENDPOINT)
@@ -117,6 +118,7 @@ const callChatAPI = async (prompt: string, options: {
   const startTime = Date.now();
   logger.apiCall('Chat API', 'POST', `${DOUBAO_API_BASE}/chat/completions`, {
     model: CHAT_MODEL,
+    prompt: prompt,
     temperature: options.temperature,
     responseFormat: options.responseFormat
   });
@@ -414,85 +416,152 @@ export const generateShotList = async (scriptData: ScriptData): Promise<Shot[]> 
 
 /**
  * Agent 3: Visual Design (Prompt Generation)
+ * 按角色 / 场景分两支，使用不同提示词。
  */
-export const generateVisualPrompts = async (type: 'character' | 'scene', data: Character | Scene, genre: string): Promise<string> => {
+export const generateVisualPrompts = async (type: 'character' | 'scene', data: Character | Scene, genre: string, style: '写实' | '漫画' = '写实'): Promise<string> => {
    logger.info('VISUAL', `生成${type === 'character' ? '角色' : '场景'}视觉提示词`, { type, genre });
    const startTime = Date.now();
-   
-   const prompt = `Generate a high-fidelity visual prompt for a ${type} in a ${genre} movie. 
-   Data: ${JSON.stringify(data)}. 
-   Output only the prompt in English, comma-separated, focused on visual details (lighting, texture, appearance).`;
 
-   const responseText = await retryOperation(() => callChatAPI(prompt));
-   
+   logger.info('VISUAL', '生成视觉提示词', { data });
+   data.referenceImage = '';
+   let prompt: string;
+   if (type === 'character') {
+     prompt = `你是一个专业的角色设计师，请为一部${genre}风格电影中的角色生成高质量的视觉描述提示词。
+   数据：${JSON.stringify(data)}。
+   仅输出中文的、逗号分隔的提示词，聚焦于角色视觉细节：外貌、服装、神态、年龄感、气质等。`;
+   } else {
+     prompt = `你是一个专业的场景设计师，请为一部${genre}风格电影中的场景生成高质量的视觉描述提示词。
+   数据：${JSON.stringify(data)}。
+   仅输出中文的、逗号分隔的提示词，聚焦于场景视觉细节：光线、氛围、空间、质感、时代感等。`;
+   }
+
+   logger.info('VISUAL', '生成视觉提示词', { prompt });
+   let responseText = await retryOperation(() => callChatAPI(prompt, {
+    responseFormat: { type: 'text' }
+   }));
+
    const duration = Date.now() - startTime;
-   logger.info('VISUAL', `${type === 'character' ? '角色' : '场景'}视觉提示词生成完成`, { 
+   logger.info('VISUAL', `${type === 'character' ? '角色' : '场景'}视觉提示词生成完成`, {
      duration: `${duration}ms`,
-     promptLength: responseText.length 
+     promptLength: responseText.length
    });
-   
+
+   if (type === 'character') {
+    responseText = responseText + `\n要求：${style}风格,仅生成一张图片， 包含角色的从头到脚的完整的全身四视图和面部特写，纯白色背景。注意保持角色服饰和发型的一致性。`;
+   } else {
+    responseText = responseText + `\n要求：${style}风格,仅生成一张图片，包含场景四个不同角度的的完整画面，注意保持场景中物品和人物等元素的一致性。`
+   }
+
    return responseText || "";
 };
 
 /**
+ * 将参考图 URL 列表统一转为 base64 编码（data URL）。
+ * 已是 data: 的保持不变；HTTP/HTTPS URL 会请求后转为 base64。
+ */
+const ensureReferenceImagesBase64 = async (urls: string[]): Promise<string[]> => {
+  const result: string[] = [];
+  for (const url of urls) {
+    if (!url) continue;
+    if (url.startsWith("data:")) { result.push(url); continue; }
+    try {
+      const isBrowser = typeof Buffer === "undefined";
+      const fetchUrl = isBrowser && (url.includes("localhost") || url.includes("127.0.0.1"))
+        ? `${getFileServerBase()}/api/proxy-image?url=${encodeURIComponent(url)}`
+        : url;
+      const res = await fetch(fetchUrl);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const contentType = res.headers.get("content-type") || "image/png";
+      if (typeof Buffer !== "undefined") {
+        const arrayBuffer = await res.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        result.push(`data:${contentType};base64,${buffer.toString("base64")}`);
+      } else {
+        const blob = await res.blob();
+        result.push(await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        }));
+      }
+    } catch (e: any) {
+      logger.warn("IMAGE", "参考图转 base64 失败，跳过该图", { url: url.slice(0, 80), error: e?.message });
+    }
+  }
+  return result;
+};
+
+export interface GenerateImageOptions {
+  refMap?: { type: "scene" | "character"; label: string }[];
+}
+
+/**
  * Agent 4 & 6: Image Generation
  * 根据火山引擎文档：https://www.volcengine.com/docs/82379/1541523?lang=zh
+ * 关键帧类型支持参考图 base64 与 refMap 对应关系。
  */
-export const generateImage = async (prompt: string, referenceImages: string[] = []): Promise<string> => {
+export const generateImage = async (prompt: string, referenceImages: string[] = [], type: 'character' | 'scene' | 'keyframe', options?: GenerateImageOptions): Promise<string> => {
   checkApiKey();
   logger.info('IMAGE', '开始生成图片', { 
     promptLength: prompt.length,
     hasReference: referenceImages.length > 0,
-    referenceCount: referenceImages.length
+    referenceImages: referenceImages,
+    referenceCount: referenceImages.length,
+    type: type
   });
   const startTime = Date.now();
 
   // If we have reference images, instruct the model to use them for consistency
   let finalPrompt = prompt;
   if (referenceImages.length > 0) {
+    const refMap = options?.refMap;
+    const refLines =
+      refMap && refMap.length > 0
+        ? refMap
+            .map(
+              (r, i) =>
+                `- 图${i + 1}：${r.type === "scene" ? "场景" : "角色"}「${r.label}」。`
+            )
+            .join("\n")
+        : "      - 第一张图为场景/环境参考。\n      - 其余图片为角色参考（如基础造型或某一变体）。";
     finalPrompt = `
-      Reference Images Information:
-      - The FIRST image provided is the Scene/Environment reference.
-      - Any subsequent images are Character references (e.g. Base Look, or specific Variation).
+      参考图说明：
+${refLines}
       
-      Task:
-      Generate a cinematic shot matching this prompt: "${prompt}".
+      任务：
+      根据以下描述生成与之匹配的电影感画面："${prompt}"。
       
-      Requirements:
-      - STRICTLY maintain the visual style, lighting, and environment from the scene reference.
-      - If characters are present, they MUST resemble the character reference images provided.
+      要求：
+      - 严格保持场景参考图中的视觉风格、光线与环境。
+      - 若画面中出现角色，必须与提供的角色参考图在形象上一致。
     `;
   }
 
   // 根据火山引擎文档，图片生成API使用prompt字段
-  // 如果支持参考图片，需要将图片转换为base64格式或URL
-  // 注意：火山引擎API可能支持base64格式的图片URL
-  const requestBody: any = {
+  let requestBody: any = {
     model: IMAGE_MODEL,
     prompt: finalPrompt
   };
 
-  // 如果提供了参考图片，添加到请求中
-  // 根据文档，可能需要使用images字段或content字段
+  // 如果提供了参考图片，添加到请求中；关键帧类型要求参考图以 base64 编码传递
   if (referenceImages.length > 0) {
-    // 准备图片数据 - 火山引擎可能支持data URL格式
-    const imageUrls = referenceImages.map((imgUrl) => {
-      // 如果已经是data URL格式，直接使用
-      if (imgUrl.startsWith('data:')) {
-        return imgUrl;
-      }
-      // 否则转换为data URL
-      return imgUrl;
-    });
-    
-    // 根据火山引擎文档，可能需要使用images字段
-    requestBody.images = imageUrls;
+    const imagePayload =
+      type === "keyframe"
+        ? await ensureReferenceImagesBase64(referenceImages)
+        : referenceImages.map((imgUrl) =>
+            imgUrl.startsWith("data:") ? imgUrl : imgUrl
+          );
+    logger.info('IMAGE', 'imagePayload', { imagePayload });
+    requestBody.images = imagePayload;
   }
 
-  logger.apiCall('Image API', 'POST', `${DOUBAO_API_BASE}/images/generations`, {
-    model: IMAGE_MODEL,
-    hasReference: referenceImages.length > 0
-  });
+  if (type === 'character' || type === 'keyframe') {
+    requestBody.size = '2848x1600';
+  } else if (type === 'scene') {
+    requestBody.size = '1600x2848';
+  }
+  logger.apiCall('Image API', 'POST', `${DOUBAO_API_BASE}/images/generations`, {requestBody});
 
   const response = await retryOperation(async () => {
     const res = await fetch(`${DOUBAO_API_BASE}/images/generations`, {
@@ -723,13 +792,14 @@ export const generateVideo = async (prompt: string, startImageBase64?: string, e
     });
   }
 
-  // 根据火山引擎文档，请求体格式
+  // 视频时长规范：4～14 秒整数
+  const clampedDuration = Math.max(4, Math.min(14, Math.round(duration ?? 4)));
   const requestBody: any = {
     model: VIDEO_MODEL,
     content: contentArray,  // content必须是数组格式，包含文本和图片
     resolution: '720p',
     ratio: '16:9',
-    duration: duration ?? 4
+    duration: clampedDuration
   };
 
   // 根据火山引擎文档，创建视频生成任务
@@ -849,28 +919,10 @@ export const generateVideo = async (prompt: string, startImageBase64?: string, e
           videoUrlType: videoUrl.startsWith('http') ? 'HTTP URL' : 'Other'
         });
         
-        // 如果返回的是 HTTP URL，下载并保存到服务器
+        // 如果返回的是 HTTP URL：不在此处下载（浏览器 fetch 会触发 CORS），
+        // 前端通过 getResourceUrl 使用 /api/proxy-video 代理播放
         if (videoUrl.startsWith('http')) {
-          try {
-            // 下载视频
-            const videoResponse = await fetch(videoUrl);
-            const videoBlob = await videoResponse.blob();
-            const videoDataUrl = await new Promise<string>((resolve, reject) => {
-              const reader = new FileReader();
-              reader.onloadend = () => resolve(reader.result as string);
-              reader.onerror = reject;
-              reader.readAsDataURL(videoBlob);
-            });
-            
-            // 保存到服务器
-            const filename = generateFilename('video', '.mp4');
-            const serverUrl = await saveFileToServer('videos', filename, videoDataUrl, 'video/mp4');
-            logger.info('VIDEO', '视频已保存到服务器', { serverUrl });
-            return serverUrl;
-          } catch (saveError: any) {
-            logger.warn('VIDEO', '视频保存到服务器失败，使用原始 URL', { error: saveError });
-            return videoUrl;
-          }
+          return videoUrl;
         }
         
         // 如果已经是 base64 data URL，直接保存

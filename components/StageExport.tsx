@@ -12,7 +12,7 @@ const StageExport: React.FC<Props> = ({ project }) => {
   const progress = totalShots > 0 ? Math.round((completedShots.length / totalShots) * 100) : 0;
   
   // Calculate total duration roughly
-  const estimatedDuration = project.shots.reduce((acc, s) => acc + (s.interval?.duration || 3), 0);
+  const estimatedDuration = project.shots.reduce((acc, s) => acc + (s.interval?.duration ?? 4), 0);
 
   return (
     <div className="flex flex-col h-full bg-[#121212] overflow-hidden">

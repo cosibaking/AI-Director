@@ -24,10 +24,10 @@ export const MOCK_SHOTS: Shot[] = [
     cameraMovement: "Tilt Up",
     characters: ["c1"],
     keyframes: [
-      { id: "kf1a", type: "start", visualPrompt: "Medium shot of Kael, rain dripping from brim of hat, looking down, neon reflection on face", status: 'completed', imageUrl: "https://picsum.photos/seed/kf1a/800/450" },
+      { id: "kf1a", type: "start", visualPrompt: "Medium shot of Kael, rain dripping from brim of hat, looking down, neon reflection on face", status: 'completed', imageUrl: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='450'%3E%3Crect fill='%23333' width='800' height='450'/%3E%3Ctext fill='%23666' x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='24'%3EPlaceholder%3C/text%3E%3C/svg%3E" },
       { id: "kf1b", type: "end", visualPrompt: "Medium shot of Kael, head tilted up looking at sky, neon light illuminating face fully", status: 'pending' }
     ],
-    interval: { id: "int1", startKeyframeId: "kf1a", endKeyframeId: "kf1b", duration: 3, motionStrength: 5, status: 'pending' }
+    interval: { id: "int1", startKeyframeId: "kf1a", endKeyframeId: "kf1b", duration: 4, motionStrength: 5, status: 'pending' }
   },
   {
     id: "shot2",

@@ -61,7 +61,8 @@ export interface ScriptData {
   genre: string;
   logline: string;
   targetDuration?: string;
-  language?: string; 
+  language?: string;
+  style?: string; // 写实 | 漫画
   characters: Character[];
   scenes: Scene[];
   storyParagraphs: { id: number; text: string; sceneRefId: string }[];
@@ -77,8 +78,9 @@ export interface ProjectState {
   // Script Phase Data
   rawScript: string;
   targetDuration: string;
-  language: string; 
-  
+  language: string;
+  style?: string; // 写实 | 漫画
+
   scriptData: ScriptData | null;
   shots: Shot[];
   isParsingScript: boolean;

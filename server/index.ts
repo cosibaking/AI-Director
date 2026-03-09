@@ -207,15 +207,18 @@ app.get('/api/files/list/:username/:resourceType?', (req, res) => {
   }
 });
 
-// 图片代理：解决浏览器端 fetch 跨域 CDN 图片时的 CORS 问题
+// 图片代理：解决浏览器端 fetch 跨域 CDN 图片时的 CORS 问题；同时允许本机文件服务 URL（关键帧参考图转 base64）
 app.get('/api/proxy-image', async (req, res) => {
   try {
     const url = req.query.url as string;
     if (!url || typeof url !== 'string') {
       return res.status(400).json({ error: 'Missing url parameter' });
     }
-    // 仅允许 HTTPS 且为火山引擎 CDN，防止 SSRF
-    if (!url.startsWith('https://') || !url.includes('volces.com')) {
+    const isOwnFileUrl =
+      (url.startsWith('http://localhost:') || url.startsWith('http://127.0.0.1:')) &&
+      url.includes('/api/files/get/');
+    const isVolcCdn = url.startsWith('https://') && url.includes('volces.com');
+    if (!isOwnFileUrl && !isVolcCdn) {
       return res.status(400).json({ error: 'Invalid image URL' });
     }
     const imgResponse = await fetch(url, { method: 'GET' });
@@ -228,6 +231,47 @@ app.get('/api/proxy-image', async (req, res) => {
     res.send(Buffer.from(arrayBuffer));
   } catch (error: any) {
     console.error('Proxy image error:', error);
+    res.status(500).json({ error: error.message || 'Proxy failed' });
+  }
+});
+
+// 视频代理：解决浏览器端 <video> 加载跨域 CDN 视频时的 CORS 问题；支持 Range 便于拖动进度条
+app.get('/api/proxy-video', async (req, res) => {
+  try {
+    const url = req.query.url as string;
+    if (!url || typeof url !== 'string') {
+      return res.status(400).json({ error: 'Missing url parameter' });
+    }
+    const isOwnFileUrl =
+      (url.startsWith('http://localhost:') || url.startsWith('http://127.0.0.1:')) &&
+      url.includes('/api/files/get/');
+    const isVolcCdn = url.startsWith('https://') && url.includes('volces.com');
+    if (!isOwnFileUrl && !isVolcCdn) {
+      return res.status(400).json({ error: 'Invalid video URL' });
+    }
+    const rangeHeader = req.headers.range;
+    const fetchOpts: RequestInit = { method: 'GET' };
+    if (rangeHeader) {
+      fetchOpts.headers = { Range: rangeHeader };
+    }
+    const videoResponse = await fetch(url, fetchOpts);
+    if (!videoResponse.ok) {
+      return res.status(videoResponse.status).send(videoResponse.statusText);
+    }
+    const contentType = videoResponse.headers.get('content-type') || 'video/mp4';
+    res.setHeader('Content-Type', contentType);
+    const contentRange = videoResponse.headers.get('Content-Range');
+    if (contentRange) {
+      res.setHeader('Content-Range', contentRange);
+      res.status(206);
+    }
+    if (videoResponse.headers.get('Accept-Ranges')) {
+      res.setHeader('Accept-Ranges', 'bytes');
+    }
+    const arrayBuffer = await videoResponse.arrayBuffer();
+    res.send(Buffer.from(arrayBuffer));
+  } catch (error: any) {
+    console.error('Proxy video error:', error);
     res.status(500).json({ error: error.message || 'Proxy failed' });
   }
 });
