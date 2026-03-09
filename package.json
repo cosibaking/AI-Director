@@ -9,7 +9,9 @@
     "dev:all": "concurrently \"npm run dev\" \"npm run dev:server\"",
     "build": "vite build",
     "preview": "vite preview",
-    "server": "tsx server/index.ts"
+    "server": "tsx server/index.ts",
+    "start": "cross-env NODE_ENV=production tsx server/index.ts",
+    "deploy": "npm install && npm run build && npm run start"
   },
   "dependencies": {
     "cors": "^2.8.5",
@@ -30,6 +32,7 @@
     "@vitejs/plugin-react": "^5.0.0",
     "autoprefixer": "^10.4.27",
     "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
     "postcss": "^8.5.8",
     "tailwindcss": "^4.2.1",
     "tsx": "^4.19.2",

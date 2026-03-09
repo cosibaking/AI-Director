@@ -245,6 +245,31 @@ npm run preview
 npm run server
 ```
 
+#### 一键部署与启动（推荐）
+
+在项目根目录执行以下任一方式，将自动完成 **安装依赖 → 构建 → 启动**：
+
+**方式一：npm 脚本**
+
+```bash
+npm run deploy
+```
+
+**方式二：Windows 批处理**
+
+```bash
+deploy.bat
+```
+
+**方式三：Linux / macOS**
+
+```bash
+chmod +x deploy.sh
+./deploy.sh
+```
+
+部署完成后，在浏览器打开 **http://localhost:3001** 即可使用。生产模式下前端与文件服务由同一端口提供，无需分别启动。
+
 ---
 
 ## ⚙️ 配置说明

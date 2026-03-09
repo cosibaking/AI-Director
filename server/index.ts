@@ -276,6 +276,18 @@ app.get('/api/proxy-video', async (req, res) => {
   }
 });
 
+// 生产环境：托管前端静态资源并支持 SPA 回退
+if (!isDev) {
+  const distPath = path.join(__dirname, '..', 'dist');
+  if (fs.existsSync(distPath)) {
+    app.use(express.static(distPath));
+    app.get('*', (req, res, next) => {
+      if (req.path.startsWith('/api/')) return next();
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
+  }
+}
+
 app.listen(PORT, () => {
   console.log(`File server running on http://localhost:${PORT}`);
   console.log(`Storage path: ${baseStoragePath}`);
