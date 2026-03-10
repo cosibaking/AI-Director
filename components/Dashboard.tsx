@@ -67,19 +67,19 @@ const Dashboard: React.FC<Props> = ({ onOpenProject }) => {
   };
 
   return (
-    <div className="min-h-screen bg-[#050505] text-zinc-300 p-8 md:p-12 font-sans selection:bg-white/20">
+    <div className="min-h-screen bg-zinc-50 text-zinc-700 p-8 md:p-12 font-sans selection:bg-indigo-200/50">
       <div className="max-w-7xl mx-auto">
-        <header className="mb-16 border-b border-zinc-900 pb-8 flex items-end justify-between">
+        <header className="mb-16 border-b border-zinc-200 pb-8 flex items-end justify-between">
           <div>
-            <h1 className="text-3xl font-light text-white tracking-tight mb-2 flex items-center gap-3">
+            <h1 className="text-3xl font-light text-zinc-900 tracking-tight mb-2 flex items-center gap-3">
               项目库
               <span className="text-zinc-800 text-lg">/</span>
-              <span className="text-zinc-600 text-sm font-mono tracking-widest uppercase">Projects Database</span>
+              <span className="text-zinc-700 text-sm font-mono tracking-widest uppercase">Projects Database</span>
             </h1>
           </div>
           <button 
             onClick={handleCreate}
-            className="group flex items-center gap-3 px-6 py-3 bg-white text-black hover:bg-zinc-200 transition-colors"
+            className="group flex items-center gap-3 px-6 py-3 bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
           >
             <Plus className="w-4 h-4" />
             <span className="font-bold text-xs tracking-widest uppercase">新建项目</span>
@@ -88,7 +88,7 @@ const Dashboard: React.FC<Props> = ({ onOpenProject }) => {
 
         {isLoading ? (
           <div className="flex justify-center py-20">
-            <Loader2 className="w-6 h-6 text-zinc-600 animate-spin" />
+            <Loader2 className="w-6 h-6 text-zinc-800 animate-spin" />
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -96,12 +96,12 @@ const Dashboard: React.FC<Props> = ({ onOpenProject }) => {
             {/* Create New Card */}
             <div 
               onClick={handleCreate}
-              className="group cursor-pointer border border-zinc-800 hover:border-zinc-500 bg-[#0A0A0A] flex flex-col items-center justify-center min-h-[240px] transition-all"
+              className="group cursor-pointer border border-zinc-200 hover:border-zinc-400 bg-white flex flex-col items-center justify-center min-h-[240px] transition-all shadow-sm rounded-lg"
             >
-              <div className="w-12 h-12 border border-zinc-700 flex items-center justify-center mb-6 group-hover:bg-zinc-800 transition-colors">
-                <Plus className="w-5 h-5 text-zinc-500 group-hover:text-white" />
+              <div className="w-12 h-12 border border-zinc-300 flex items-center justify-center mb-6 group-hover:bg-indigo-50 transition-colors rounded-lg">
+                <Plus className="w-5 h-5 text-zinc-700 group-hover:text-indigo-600" />
               </div>
-              <span className="text-zinc-600 font-mono text-[10px] uppercase tracking-widest group-hover:text-zinc-300">Create New Project</span>
+              <span className="text-zinc-700 font-mono text-[10px] uppercase tracking-widest group-hover:text-zinc-700">Create New Project</span>
             </div>
 
             {/* Project List */}
@@ -109,31 +109,31 @@ const Dashboard: React.FC<Props> = ({ onOpenProject }) => {
               <div 
                 key={proj.id}
                 onClick={() => onOpenProject(proj)}
-                className="group bg-[#0A0A0A] border border-zinc-800 hover:border-zinc-600 p-0 flex flex-col cursor-pointer transition-all relative overflow-hidden h-[240px]"
+                className="group bg-white border border-zinc-200 hover:border-zinc-300 p-0 flex flex-col cursor-pointer transition-all relative overflow-hidden h-[240px] shadow-sm rounded-lg"
               >
                   {/* Delete Confirmation Overlay */}
                   {deleteConfirmId === proj.id && (
                     <div 
-                        className="absolute inset-0 z-20 bg-[#0A0A0A] flex flex-col items-center justify-center p-6 space-y-4 animate-in fade-in duration-200"
+                        className="absolute inset-0 z-20 bg-white flex flex-col items-center justify-center p-6 space-y-4 animate-in fade-in duration-200 border border-zinc-200 rounded-lg"
                         onClick={(e) => e.stopPropagation()} 
                     >
-                        <div className="w-10 h-10 bg-red-900/20 flex items-center justify-center rounded-full">
+                        <div className="w-10 h-10 bg-red-100 flex items-center justify-center rounded-full">
                            <AlertTriangle className="w-5 h-5 text-red-500" />
                         </div>
                         <div className="text-center">
-                            <p className="text-white font-bold text-xs uppercase tracking-widest">确认删除？</p>
-                            <p className="text-zinc-500 text-[10px] mt-1 font-mono">此操作无法撤销。</p>
+                            <p className="text-zinc-900 font-bold text-xs uppercase tracking-widest">确认删除？</p>
+                            <p className="text-zinc-700 text-[10px] mt-1 font-mono">此操作无法撤销。</p>
                         </div>
                         <div className="flex gap-2 w-full pt-2">
                             <button 
                                 onClick={cancelDelete}
-                                className="flex-1 py-3 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white text-[10px] font-bold uppercase tracking-wider transition-colors border border-zinc-800"
+                                className="flex-1 py-3 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 hover:text-zinc-900 text-[10px] font-bold uppercase tracking-wider transition-colors border border-zinc-200"
                             >
                                 取消
                             </button>
                             <button 
                                 onClick={(e) => confirmDelete(e, proj.id)}
-                                className="flex-1 py-3 bg-red-900/20 hover:bg-red-900/40 text-red-400 hover:text-red-200 text-[10px] font-bold uppercase tracking-wider transition-colors border border-red-900/30"
+                                className="flex-1 py-3 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 text-[10px] font-bold uppercase tracking-wider transition-colors border border-red-200"
                             >
                                 删除
                             </button>
@@ -146,36 +146,36 @@ const Dashboard: React.FC<Props> = ({ onOpenProject }) => {
                      {/* Delete Button */}
                      <button 
                         onClick={(e) => requestDelete(e, proj.id)}
-                        className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 p-2 hover:bg-zinc-800 text-zinc-600 hover:text-red-400 transition-all rounded-sm z-10"
+                        className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 p-2 hover:bg-zinc-200 text-zinc-700 hover:text-red-500 transition-all rounded-sm z-10"
                         title="删除项目"
                     >
                         <Trash2 className="w-4 h-4" />
                     </button>
 
                      <div className="flex-1">
-                        <Folder className="w-8 h-8 text-zinc-800 mb-6 group-hover:text-zinc-500 transition-colors" />
-                        <h3 className="text-sm font-bold text-white mb-2 line-clamp-1 tracking-wide">{proj.title}</h3>
+                        <Folder className="w-8 h-8 text-zinc-800 mb-6 group-hover:text-indigo-500 transition-colors" />
+                        <h3 className="text-sm font-bold text-zinc-900 mb-2 line-clamp-1 tracking-wide">{proj.title}</h3>
                         <div className="flex flex-wrap gap-2 mb-4">
-                            <span className="text-[9px] font-mono text-zinc-500 border border-zinc-800 px-1.5 py-0.5 uppercase tracking-wider">
+                            <span className="text-[9px] font-mono text-zinc-700 border border-zinc-200 px-1.5 py-0.5 uppercase tracking-wider">
                               {proj.stage === 'script' ? '剧本阶段' : 
                                proj.stage === 'assets' ? '资产生成' :
                                proj.stage === 'director' ? '导演工作台' : '导出阶段'}
                             </span>
                         </div>
                         {proj.scriptData?.logline && (
-                            <p className="text-[10px] text-zinc-600 line-clamp-2 leading-relaxed font-mono border-l border-zinc-800 pl-2">
+                            <p className="text-[10px] text-zinc-800 line-clamp-2 leading-relaxed font-mono border-l border-zinc-200 pl-2">
                             {proj.scriptData.logline}
                             </p>
                         )}
                      </div>
                   </div>
 
-                  <div className="px-6 py-3 border-t border-zinc-900 flex items-center justify-between bg-[#080808]">
-                    <div className="flex items-center gap-2 text-[9px] text-zinc-600 font-mono uppercase tracking-widest">
+                  <div className="px-6 py-3 border-t border-zinc-200 flex items-center justify-between bg-zinc-50 rounded-b-lg">
+                    <div className="flex items-center gap-2 text-[9px] text-zinc-700 font-mono uppercase tracking-widest">
                         <Calendar className="w-3 h-3" />
                         {formatDate(proj.lastModified)}
                     </div>
-                    <ChevronRight className="w-3 h-3 text-zinc-700 group-hover:text-white transition-colors" />
+                    <ChevronRight className="w-3 h-3 text-zinc-800 group-hover:text-zinc-700 transition-colors" />
                   </div>
               </div>
             ))}

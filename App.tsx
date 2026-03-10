@@ -114,41 +114,41 @@ function App() {
       case 'export':
         return <StageExport project={project} />;
       default:
-        return <div className="text-white">未知阶段</div>;
+        return <div className="text-zinc-900">未知阶段</div>;
     }
   };
 
   // API Key Entry Screen (Industrial Design)
   if (!apiKey) {
     return (
-      <div className="h-screen bg-[#050505] flex flex-col items-center justify-center p-8 relative overflow-hidden">
+      <div className="h-screen bg-zinc-50 flex flex-col items-center justify-center p-8 relative overflow-hidden">
         {/* Background Accents */}
-        <div className="absolute top-0 right-0 p-64 bg-indigo-900/5 blur-[150px] rounded-full pointer-events-none"></div>
-        <div className="absolute bottom-0 left-0 p-48 bg-zinc-900/10 blur-[120px] rounded-full pointer-events-none"></div>
+        <div className="absolute top-0 right-0 p-64 bg-indigo-200/30 blur-[150px] rounded-full pointer-events-none"></div>
+        <div className="absolute bottom-0 left-0 p-48 bg-zinc-200/50 blur-[120px] rounded-full pointer-events-none"></div>
 
-        <div className="w-full max-w-md bg-[#0A0A0A] border border-zinc-800 p-8 rounded-xl shadow-2xl relative z-10 animate-in fade-in zoom-in-95 duration-300">
+        <div className="w-full max-w-md bg-white border border-zinc-200 p-8 rounded-xl shadow-2xl relative z-10 animate-in fade-in zoom-in-95 duration-300">
           
-          <div className="flex items-center gap-3 mb-8 border-b border-zinc-900 pb-6">
-             <div className="w-10 h-10 bg-white text-black flex items-center justify-center">
+          <div className="flex items-center gap-3 mb-8 border-b border-zinc-200 pb-6">
+             <div className="w-10 h-10 bg-indigo-600 text-white flex items-center justify-center">
                 <Key className="w-5 h-5" />
              </div>
              <div>
-                <h1 className="text-xl font-bold text-white tracking-wide">CineGen AI Director</h1>
-                <p className="text-[10px] text-zinc-500 uppercase tracking-widest font-mono">Authentication Required</p>
+                <h1 className="text-xl font-bold text-zinc-900 tracking-wide">CineGen AI Director</h1>
+                <p className="text-[10px] text-zinc-700 uppercase tracking-widest font-mono">Authentication Required</p>
              </div>
           </div>
 
           <div className="space-y-6">
              <div>
-               <label className="block text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2">火山云 API Key</label>
+               <label className="block text-[10px] font-bold text-zinc-700 uppercase tracking-widest mb-2">火山云 API Key</label>
                <input 
                  type="password" 
                  value={inputKey}
                  onChange={(e) => setInputKey(e.target.value)}
                  placeholder="Enter your API Key..."
-                 className="w-full bg-[#141414] border border-zinc-800 text-white px-4 py-3 text-sm rounded-lg focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-900 transition-all font-mono placeholder:text-zinc-700"
+                 className="w-full bg-zinc-50 border border-zinc-200 text-zinc-900 px-4 py-3 text-sm rounded-lg focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-300 transition-all font-mono placeholder:text-zinc-500"
                />
-               <p className="mt-3 text-[10px] text-zinc-600 leading-relaxed">
+               <p className="mt-3 text-[10px] text-zinc-700 leading-relaxed">
                   本应用需要火山云 Doubao 模型权限（Chat: Doubao-Seed-1.8, Image: Doubao-Seedream4.5, Video: Doubao-Seedance1.5-pro）。请确保您的 API Key 已开通相应服务权限。
                   <a href="https://www.volcengine.com/docs/8239" target="_blank" rel="noreferrer" className="text-indigo-400 hover:underline ml-1">查看文档</a>
                </p>
@@ -157,7 +157,7 @@ function App() {
              <button 
                onClick={handleSaveKey}
                disabled={!inputKey}
-               className="w-full py-3 bg-white text-black font-bold uppercase tracking-widest text-xs rounded-lg hover:bg-zinc-200 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+               className="w-full py-3 bg-indigo-600 text-white font-bold uppercase tracking-widest text-xs rounded-lg hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
              >
                Confirm Access <ArrowRight className="w-3 h-3" />
              </button>
@@ -176,7 +176,7 @@ function App() {
   if (!project) {
     return (
        <>
-         <button onClick={handleClearKey} className="fixed top-4 right-4 z-50 text-[10px] text-zinc-600 hover:text-red-500 transition-colors uppercase font-mono tracking-widest">
+         <button onClick={handleClearKey} className="fixed top-4 right-4 z-50 text-[10px] text-zinc-700 hover:text-red-500 transition-colors uppercase font-mono tracking-widest">
             Sign Out
          </button>
          <Dashboard onOpenProject={handleOpenProject} />
@@ -186,7 +186,7 @@ function App() {
 
   // Workspace View
   return (
-    <div className="flex h-screen bg-[#121212] font-sans text-gray-100 selection:bg-indigo-500/30">
+    <div className="flex h-screen bg-zinc-100 font-sans text-zinc-900 selection:bg-indigo-500/20">
       <Sidebar 
         currentStage={project.stage} 
         setStage={setStage} 
@@ -199,7 +199,7 @@ function App() {
         {renderStage()}
         
         {/* Save Status Indicator */}
-        <div className="absolute top-4 right-6 pointer-events-none opacity-50 flex items-center gap-2 text-xs font-mono text-zinc-400 bg-black/50 px-2 py-1 rounded-full backdrop-blur-sm z-50">
+        <div className="absolute top-4 right-6 pointer-events-none opacity-80 flex items-center gap-2 text-xs font-mono text-zinc-800 bg-white/90 border border-zinc-200 px-2 py-1 rounded-full backdrop-blur-sm z-50 shadow-sm">
            {saveStatus === 'saving' ? (
              <>
                <Save className="w-3 h-3 animate-pulse" />
@@ -221,8 +221,8 @@ function App() {
         onApiKeyUpdate={setApiKey}
       />
       
-      <div className="lg:hidden fixed inset-0 bg-black z-[100] flex items-center justify-center p-8 text-center">
-        <p className="text-zinc-500">为了获得最佳体验，请使用桌面浏览器访问。</p>
+      <div className="lg:hidden fixed inset-0 bg-zinc-100 z-[100] flex items-center justify-center p-8 text-center">
+        <p className="text-zinc-700">为了获得最佳体验，请使用桌面浏览器访问。</p>
       </div>
     </div>
   );
